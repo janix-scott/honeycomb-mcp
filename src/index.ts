@@ -5,6 +5,8 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { readFileSync } from "node:fs";
@@ -406,6 +408,20 @@ const ColumnAnalysisSchema = z.object({
   timeRange: z.number().optional(),
 });
 
+const PromptSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  arguments: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        required: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+});
+
 // Server setup
 
 const honeycombConfig = loadConfig();
@@ -418,6 +434,7 @@ const server = new Server(
     capabilities: {
       tools: {},
       resources: {},
+      prompts: {},
     },
   },
 );
@@ -662,6 +679,121 @@ server.setRequestHandler(
     }
   },
 );
+
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  return {
+    prompts: [
+      {
+        name: "analyze-honeycomb",
+        description: "Analyze data from a Honeycomb dataset",
+        arguments: [
+          {
+            name: "dataset",
+            description: "The dataset to analyze",
+            required: true,
+          },
+          {
+            name: "column",
+            description: "Column to analyze (e.g., duration_ms, status_code)",
+            required: true,
+          },
+          {
+            name: "timeRange",
+            description: "Time range in seconds (default: 3600)",
+            required: false,
+          },
+        ],
+      },
+      {
+        name: "honeycomb-column-stats",
+        description: "Get detailed statistics about a specific column",
+        arguments: [
+          {
+            name: "dataset",
+            description: "The dataset to analyze",
+            required: true,
+          },
+          {
+            name: "column",
+            description: "The column to analyze",
+            required: true,
+          },
+        ],
+      },
+      {
+        name: "honeycomb-schema",
+        description: "Get the schema and column information for a dataset",
+        arguments: [
+          {
+            name: "dataset",
+            description: "The dataset to inspect",
+            required: true,
+          },
+        ],
+      },
+    ],
+  };
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  switch (name) {
+    case "analyze-honeycomb": {
+      const dataset = args?.dataset;
+      const column = args?.column;
+      const timeRange = args?.timeRange || "3600";
+
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `Analyze the '${column}' column in the '${dataset}' dataset over the last ${timeRange} seconds. First check the column type using get-columns, then use run-query to get statistics and analyze-column for detailed analysis if appropriate.`,
+            },
+          },
+        ],
+      };
+    }
+
+    case "honeycomb-column-stats": {
+      const dataset = args?.dataset;
+      const column = args?.column;
+
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `Provide a detailed analysis of the '${column}' column in the '${dataset}' dataset. First verify the column exists using get-columns, then use analyze-column to get statistics and value distributions. For numeric columns, include percentile analysis.`,
+            },
+          },
+        ],
+      };
+    }
+
+    case "honeycomb-schema": {
+      const dataset = args?.dataset;
+
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `Show me the schema for the '${dataset}' dataset. First use get-columns to list all available columns with their types, then provide a summary of the structure including any special columns like duration_ms, trace_id, or status fields.`,
+            },
+          },
+        ],
+      };
+    }
+
+    default:
+      throw new Error(`Unknown prompt: ${name}`);
+  }
+});
 
 async function main() {
   const transport = new StdioServerTransport();
