@@ -13,6 +13,30 @@ import {
   ColumnAnalysisSchema,
 } from "./types/schema.js";
 import { Dataset, DatasetWithColumns } from "./types/api.js";
+import { AnalysisQuery } from "./types/query.js";
+import { HoneycombError } from "./utils/errors.js";
+
+async function handleToolError(
+  error: unknown,
+  toolName: string,
+): Promise<{ content: { type: "text"; text: string }[] }> {
+  let errorMessage = "Unknown error occurred";
+
+  if (error instanceof HoneycombError) {
+    errorMessage = `Honeycomb API error (${error.statusCode}): ${error.message}`;
+  } else if (error instanceof Error) {
+    errorMessage = error.message;
+  }
+
+  return {
+    content: [
+      {
+        type: "text",
+        text: `Failed to execute tool '${toolName}': ${errorMessage}\n\nPlease verify:\n- Your API key is valid\n- The environment exists\n- The dataset exists\n- Required parameters are provided correctly`,
+      },
+    ],
+  };
+}
 
 export function registerHandlers(server: Server, api: HoneycombAPI) {
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
@@ -43,38 +67,6 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
       }
 
       return { resources: allResources };
-    } catch (error) {
-      console.error("Error listing resources:", error);
-      return { resources: [] };
-    }
-  });
-
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    try {
-      // Get list of all environments
-      const environments = api.getEnvironments();
-      const allDatasets: Dataset[] = [];
-
-      // Get datasets from each environment
-      for (const env of environments) {
-        try {
-          const datasets = await api.listDatasets(env);
-          allDatasets.push(...datasets);
-        } catch (error) {
-          console.error(
-            `Error listing datasets for environment ${env}:`,
-            error,
-          );
-        }
-      }
-
-      return {
-        resources: allDatasets.map((dataset: Dataset) => ({
-          uri: `honeycomb://${dataset.slug}`,
-          name: dataset.name,
-          description: `Honeycomb dataset: ${dataset.name}`,
-        })),
-      };
     } catch (error) {
       console.error("Error listing resources:", error);
       return { resources: [] };
@@ -155,12 +147,43 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
                 description: "Name of the dataset",
               },
             },
-            required: ["environment, dataset"],
+            required: ["environment", "dataset"],
           },
         },
         {
           name: "run-query",
-          description: "Run a basic analytics query on a dataset",
+          description: `Run an analytics query on a Honeycomb dataset. Specialized in analyzing traces, errors, latency, and service behavior.
+
+          Common Query Patterns:
+          1. Latency Analysis
+          - Use HEATMAP with duration_ms to see distribution
+          - Filter trace.parent_id does-not-exist for root spans
+          - Break down by http.target and name
+          Example: {"calculations":[{"column":"duration_ms","op":"HEATMAP"},{"column":"duration_ms","op":"MAX"}],"filters":[{"column":"trace.parent_id","op":"does-not-exist"}],"breakdowns":["http.target","name"]}
+
+          2. Database Performance
+          - Filter on db.statement exists
+          - Use HEATMAP with duration_ms
+          Example: {"calculations":[{"column":"duration_ms","op":"HEATMAP"}],"filters":[{"column":"db.statement","op":"exists"}],"breakdowns":["db.statement"]}
+
+          3. Error Analysis
+          - Use error column (boolean) for error rate
+          - Break down by name for error source
+          - Use COUNT with AVG(error) for error rate
+          Example: {"calculations":[{"op":"COUNT"},{"op":"AVG","column":"error"}],"filters":[{"column":"error","op":"exists"}],"breakdowns":["name"]}
+
+          4. Exception Analysis
+          - Filter on exception.message exists
+          - Break down by exception.message and parent_name
+          Example: {"calculations":[{"op":"COUNT"}],"filters":[{"column":"exception.message","op":"exists"},{"column":"parent_name","op":"exists"}],"breakdowns":["exception.message","parent_name"]}
+
+          Key Tips:
+          - COUNT counts events, COUNT_DISTINCT counts unique values
+          - HEATMAP shows distributions (pair with AVG,SUM,P99,RATE_AVG)
+          - trace.parent_id does-not-exist identifies root spans
+          - name column identifies span or span event
+          - error is a boolean column for operation status
+          `,
           inputSchema: {
             type: "object",
             properties: {
@@ -170,34 +193,187 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               },
               dataset: {
                 type: "string",
-                description: "Name of the dataset",
+                description: "Name of the dataset to query",
               },
-              calculation: {
-                type: "string",
-                enum: ["COUNT", "AVG", "MAX", "MIN", "P95", "P99"],
-                description: "Type of calculation to perform",
-              },
-              column: {
-                type: "string",
+              calculations: {
+                type: "array",
                 description:
-                  "Column to analyze (required for non-COUNT calculations)",
-              },
-              timeRange: {
-                type: "number",
-                description: "Time range in seconds (default: 3600)",
+                  "List of metrics to calculate. Required for all queries.",
+                items: {
+                  type: "object",
+                  properties: {
+                    op: {
+                      type: "string",
+                      enum: [
+                        "COUNT", // Simple event count
+                        "CONCURRENCY", // Concurrent operations
+                        "COUNT_DISTINCT", // Unique value count
+                        "SUM", // Sum of values
+                        "AVG", // Average of values
+                        "MAX", // Maximum value
+                        "MIN", // Minimum value
+                        "P001",
+                        "P01",
+                        "P05",
+                        "P10",
+                        "P25", // Percentiles (0.1% to 25%)
+                        "P50", // Median
+                        "P75",
+                        "P90",
+                        "P95",
+                        "P99",
+                        "P999", // Percentiles (75% to 99.9%)
+                        "RATE_AVG", // Average rate per second
+                        "RATE_SUM", // Sum rate per second
+                        "RATE_MAX", // Maximum rate per second
+                        "HEATMAP", // Distribution visualization
+                      ],
+                      description:
+                        "Type of calculation to perform. Note: HEATMAP cannot be used with orders or having filters",
+                    },
+                    column: {
+                      type: "string",
+                      description:
+                        "Column to perform calculation on. Required for all operations except COUNT and CONCURRENCY",
+                    },
+                  },
+                  required: ["op"],
+                },
               },
               breakdowns: {
                 type: "array",
                 items: { type: "string" },
-                description: "Columns to group by",
+                description:
+                  "Columns to group results by. Use for dimensional analysis like grouping by service name or error type",
+              },
+              filters: {
+                type: "array",
+                description:
+                  "Conditions to filter data before calculations are performed",
+                items: {
+                  type: "object",
+                  properties: {
+                    column: {
+                      type: "string",
+                      description: "Column to filter on",
+                    },
+                    op: {
+                      type: "string",
+                      enum: [
+                        "=",
+                        "!=", // Equality
+                        ">",
+                        ">=",
+                        "<",
+                        "<=", // Numeric comparison
+                        "starts-with",
+                        "does-not-start-with", // String prefix
+                        "ends-with",
+                        "does-not-end-with", // String suffix
+                        "contains",
+                        "does-not-contain", // Substring
+                        "exists",
+                        "does-not-exist", // Presence check
+                        "in",
+                        "not-in", // List membership
+                      ],
+                      description: "Filter operation to apply",
+                    },
+                    value: {
+                      description:
+                        "Value to compare against. Not needed for exists/does-not-exist",
+                    },
+                  },
+                  required: ["column", "op"],
+                },
+              },
+              filter_combination: {
+                type: "string",
+                enum: ["AND", "OR"],
+                description:
+                  "How to combine multiple filters. AND requires all filters to match, OR requires any filter to match",
+              },
+              orders: {
+                type: "array",
+                description:
+                  "How to sort results. Cannot be used with HEATMAP calculations",
+                items: {
+                  type: "object",
+                  properties: {
+                    column: {
+                      type: "string",
+                      description:
+                        "Column to sort by. Use for raw column values",
+                    },
+                    op: {
+                      type: "string",
+                      description:
+                        "Calculation to sort by (e.g. COUNT, P95). Use when sorting by a calculated metric",
+                    },
+                    order: {
+                      type: "string",
+                      enum: ["ascending", "descending"],
+                      description: "Sort direction",
+                    },
+                  },
+                  required: ["order"],
+                },
+              },
+              having: {
+                type: "array",
+                description:
+                  "Filters to apply after calculations. Cannot be used with HEATMAP calculations",
+                items: {
+                  type: "object",
+                  properties: {
+                    calculate_op: {
+                      type: "string",
+                      description: "Calculation to filter on (e.g. COUNT, P95)",
+                    },
+                    column: {
+                      type: "string",
+                      description: "Column used in calculation",
+                    },
+                    op: {
+                      type: "string",
+                      enum: ["=", "!=", ">", ">=", "<", "<="],
+                      description: "Comparison operator",
+                    },
+                    value: {
+                      type: "number",
+                      description:
+                        "Value to compare calculation result against",
+                    },
+                  },
+                  required: ["calculate_op", "op", "value"],
+                },
+              },
+              time_range: {
+                type: "number",
+                description:
+                  "Relative time range in seconds (e.g., 3600 for last hour, 86400 for last day)",
+              },
+              start_time: {
+                type: "number",
+                description: "Absolute start time as UNIX timestamp in seconds",
+              },
+              end_time: {
+                type: "number",
+                description: "Absolute end time as UNIX timestamp in seconds",
+              },
+              granularity: {
+                type: "number",
+                description:
+                  "Time bucket size in seconds for time series analysis (e.g., 60 for minute-level buckets)",
               },
             },
-            required: ["environment", "dataset", "calculation"],
+            required: ["environment", "dataset", "calculations"],
           },
         },
         {
           name: "analyze-column",
-          description: "Perform detailed analysis of a specific column",
+          description:
+            "Perform detailed statistical analysis of a specific column",
           inputSchema: {
             type: "object",
             properties: {
@@ -241,7 +417,8 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
         },
         {
           name: "get-slo",
-          description: "Get detailed information about a specific SLO",
+          description:
+            "Get detailed information about a specific SLO including current compliance and budget",
           inputSchema: {
             type: "object",
             properties: {
@@ -263,7 +440,7 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
         },
         {
           name: "list-triggers",
-          description: "List all triggers for a dataset",
+          description: "List all triggers (alerts) for a dataset",
           inputSchema: {
             type: "object",
             properties: {
@@ -281,7 +458,8 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
         },
         {
           name: "get-trigger",
-          description: "Get information about a specific trigger",
+          description:
+            "Get detailed information about a specific trigger including its current state",
           inputSchema: {
             type: "object",
             properties: {
@@ -310,6 +488,17 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
     async (request: z.infer<typeof CallToolRequestSchema>) => {
       const { name, arguments: args } = request.params;
 
+      if (!args) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Missing required arguments for tool execution",
+            },
+          ],
+        };
+      }
+
       switch (name) {
         case "list-datasets": {
           const { environment } = z
@@ -337,17 +526,7 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to list datasets",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
@@ -374,63 +553,43 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    error instanceof Error
-                      ? error.message
-                      : "An unknown error occurred",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
         case "run-query": {
-          const params = z
-            .object({
-              environment: z.string(),
-              dataset: z.string(),
-              calculation: z.enum(["COUNT", "AVG", "MAX", "MIN", "P95", "P99"]),
-              column: z.string().optional(),
-              timeRange: z.number().optional(),
-              breakdowns: z.array(z.string()).optional(),
-              filter: z.record(z.any()).optional(),
-            })
-            .parse(args);
+          const params = QueryToolSchema.parse(args);
+          const { environment, dataset, calculations, ...queryParams } = params;
 
           try {
-            const results = await api.runAnalysisQuery(
-              params.environment,
-              params.dataset,
-              {
-                dataset: params.dataset,
-                calculation: params.calculation,
-                column: params.column,
-                timeRange: params.timeRange,
-                breakdowns: params.breakdowns,
-                filter: params.filter,
-              },
+            const query: AnalysisQuery = {
+              calculations,
+              ...queryParams,
+            };
+
+            const results = await api.queryAndWaitForResults(
+              environment,
+              dataset,
+              query,
             );
+
             return {
               content: [
                 {
                   type: "text",
-                  text: JSON.stringify(results.data, null, 2),
+                  text: JSON.stringify(
+                    {
+                      results: results.data?.results || [],
+                      series: results.data?.series || [],
+                    },
+                    null,
+                    2,
+                  ),
                 },
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: error instanceof Error ? error.message : "Query failed",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
@@ -463,15 +622,7 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    error instanceof Error ? error.message : "Analysis failed",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
@@ -506,17 +657,7 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to list SLOs",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
@@ -556,17 +697,7 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to get SLO details",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
@@ -601,17 +732,7 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to list triggers",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
@@ -651,22 +772,19 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               ],
             };
           } catch (error) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text:
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to get trigger details",
-                },
-              ],
-            };
+            return handleToolError(error, name);
           }
         }
 
         default:
-          throw new Error(`Unknown tool: ${name}`);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Unknown tool: ${name}. Available tools can be listed using the list-tools command.`,
+              },
+            ],
+          };
       }
     },
   );

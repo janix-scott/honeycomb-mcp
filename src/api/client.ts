@@ -189,15 +189,17 @@ export class HoneycombAPI {
     params: z.infer<typeof QueryToolSchema>,
   ) {
     const query: AnalysisQuery = {
-      calculations: [
-        {
-          op: params.calculation,
-          ...(params.column && { column: params.column }),
-        },
-      ],
+      calculations: params.calculations,
       breakdowns: params.breakdowns || [],
-      time_range: params.timeRange || 3600,
-      ...(params.filter && { filters: [params.filter] }),
+      filters: params.filters,
+      filter_combination: params.filter_combination,
+      time_range: params.time_range || 3600,
+      orders: params.orders,
+      limit: params.limit,
+      start_time: params.start_time,
+      end_time: params.end_time,
+      granularity: params.granularity,
+      having: params.having,
     };
 
     try {

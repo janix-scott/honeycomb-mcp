@@ -27,13 +27,98 @@ export const queryToolSchema = z.object({
   query: z.record(z.any()),
 });
 
-export const QueryToolSchema = z.object({
-  dataset: z.string(),
-  timeRange: z.number().optional(),
-  calculation: z.enum(["COUNT", "AVG", "MAX", "MIN", "P95", "P99"]),
+export const FilterOperatorSchema = z.enum([
+  "=",
+  "!=",
+  ">",
+  ">=",
+  "<",
+  "<=",
+  "starts-with",
+  "does-not-start-with",
+  "ends-with",
+  "does-not-end-with",
+  "exists",
+  "does-not-exist",
+  "contains",
+  "does-not-contain",
+  "in",
+  "not-in",
+]);
+
+export const FilterSchema = z.object({
+  column: z.string(),
+  op: FilterOperatorSchema,
+  value: z
+    .union([
+      z.string(),
+      z.number(),
+      z.boolean(),
+      z.array(z.string()),
+      z.array(z.number()),
+    ])
+    .optional(),
+});
+
+export const OrderDirectionSchema = z.enum(["ascending", "descending"]);
+
+export const OrderSchema = z.object({
   column: z.string().optional(),
-  filter: z.record(z.any()).optional(),
+  op: z.string(),
+  order: OrderDirectionSchema,
+});
+
+export const QueryCalculationSchema = z.object({
+  op: z.enum([
+    "COUNT",
+    "CONCURRENCY",
+    "SUM",
+    "AVG",
+    "COUNT_DISTINCT",
+    "MAX",
+    "MIN",
+    "P001",
+    "P01",
+    "P05",
+    "P10",
+    "P20",
+    "P25",
+    "P50",
+    "P75",
+    "P80",
+    "P90",
+    "P95",
+    "P99",
+    "P999",
+    "RATE_AVG",
+    "RATE_SUM",
+    "RATE_MAX",
+    "HEATMAP",
+  ]),
+  column: z.string().optional(),
+});
+
+export const HavingSchema = z.object({
+  calculate_op: z.string(),
+  column: z.string().optional(),
+  op: z.enum(["=", "!=", ">", ">=", "<", "<="]),
+  value: z.number(),
+});
+
+export const QueryToolSchema = z.object({
+  environment: z.string(),
+  dataset: z.string(),
+  calculations: z.array(QueryCalculationSchema),
   breakdowns: z.array(z.string()).optional(),
+  filters: z.array(FilterSchema).optional(),
+  filter_combination: z.enum(["AND", "OR"]).optional(),
+  orders: z.array(OrderSchema).optional(),
+  limit: z.number().optional(),
+  time_range: z.number().optional(),
+  start_time: z.number().optional(),
+  end_time: z.number().optional(),
+  granularity: z.number().optional(),
+  having: z.array(HavingSchema).optional(),
 });
 
 export const ColumnAnalysisSchema = z.object({
