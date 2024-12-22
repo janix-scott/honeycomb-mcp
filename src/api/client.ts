@@ -12,6 +12,7 @@ import { Dataset } from "../types/api.js";
 import { SLO, SLODetailedResponse } from "../types/slo.js";
 import { TriggerResponse } from "../types/trigger.js";
 import { HoneycombEnvironment } from "../types/config.js";
+import { QueryOptions } from "../types/api.js";
 
 export class HoneycombAPI {
   private readonly environments: Map<string, HoneycombEnvironment>;
@@ -113,11 +114,24 @@ export class HoneycombAPI {
     environment: string,
     datasetSlug: string,
     queryResultId: string,
+    includeSeries: boolean = false,
   ): Promise<QueryResult> {
-    return this.request<QueryResult>(
+    const response = await this.request<QueryResult>(
       environment,
       `/1/query_results/${datasetSlug}/${queryResultId}`,
+      {
+        params: {
+          include_series: includeSeries,
+        },
+      },
     );
+
+    if (!includeSeries && response.data) {
+      const { series, ...rest } = response.data;
+      response.data = rest;
+    }
+
+    return response;
   }
 
   async queryAndWaitForResults(
@@ -125,11 +139,17 @@ export class HoneycombAPI {
     datasetSlug: string,
     query: AnalysisQuery,
     maxAttempts = 10,
+    options: QueryOptions = {},
   ): Promise<QueryResult> {
+    const defaultLimit = 100;
+    const queryWithLimit = {
+      ...query,
+      limit: query.limit || options.limit || defaultLimit,
+    };
     const queryResponse = await this.createQuery(
       environment,
       datasetSlug,
-      query,
+      queryWithLimit,
     );
     const queryId = queryResponse.id;
 
@@ -146,6 +166,7 @@ export class HoneycombAPI {
         environment,
         datasetSlug,
         queryResultId,
+        options.includeSeries,
       );
       if (results.complete) {
         return results;

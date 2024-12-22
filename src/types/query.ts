@@ -54,11 +54,13 @@ export interface AnalysisQuery {
   }>;
 }
 
+interface QueryResultData {
+  results?: any[];
+  series?: any[];
+}
+
 export interface QueryResult {
-  data?: {
-    results: any[];
-    series: any[];
-  };
+  data?: QueryResultData;
   links?: {
     query_url?: string;
     graph_image_url?: string;

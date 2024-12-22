@@ -1,7 +1,3 @@
-import { z } from "zod";
-import { Column } from "./column.js";
-import { AnalysisQuery, QueryResult } from "./query.js";
-
 export interface Resource {
   uri: string;
   name: string;
@@ -63,4 +59,9 @@ export interface PromptResponse {
     role: "user";
     content: MessageContent;
   }[];
+}
+
+export interface QueryOptions {
+  includeSeries?: boolean;
+  limit?: number;
 }

@@ -159,23 +159,19 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
           - Use HEATMAP with duration_ms to see distribution
           - Filter trace.parent_id does-not-exist for root spans
           - Break down by http.target and name
-          Example: {"calculations":[{"column":"duration_ms","op":"HEATMAP"},{"column":"duration_ms","op":"MAX"}],"filters":[{"column":"trace.parent_id","op":"does-not-exist"}],"breakdowns":["http.target","name"]}
 
           2. Database Performance
           - Filter on db.statement exists
           - Use HEATMAP with duration_ms
-          Example: {"calculations":[{"column":"duration_ms","op":"HEATMAP"}],"filters":[{"column":"db.statement","op":"exists"}],"breakdowns":["db.statement"]}
 
           3. Error Analysis
           - Use error column (boolean) for error rate
           - Break down by name for error source
           - Use COUNT with AVG(error) for error rate
-          Example: {"calculations":[{"op":"COUNT"},{"op":"AVG","column":"error"}],"filters":[{"column":"error","op":"exists"}],"breakdowns":["name"]}
 
           4. Exception Analysis
           - Filter on exception.message exists
           - Break down by exception.message and parent_name
-          Example: {"calculations":[{"op":"COUNT"}],"filters":[{"column":"exception.message","op":"exists"},{"column":"parent_name","op":"exists"}],"breakdowns":["exception.message","parent_name"]}
 
           Key Tips:
           - COUNT counts events, COUNT_DISTINCT counts unique values
@@ -183,7 +179,11 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
           - trace.parent_id does-not-exist identifies root spans
           - name column identifies span or span event
           - error is a boolean column for operation status
-          `,
+
+          Performance Notes:
+          - Results limited to 100 rows by default
+          - Time series data is disabled by default for performance
+          - Use the Honeycomb UI (via queryUrl in response) for full result sets`,
           inputSchema: {
             type: "object",
             properties: {
@@ -571,6 +571,11 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
               environment,
               dataset,
               query,
+              10,
+              {
+                includeSeries: false,
+                limit: 50,
+              },
             );
 
             return {
@@ -580,7 +585,7 @@ export function registerHandlers(server: Server, api: HoneycombAPI) {
                   text: JSON.stringify(
                     {
                       results: results.data?.results || [],
-                      series: results.data?.series || [],
+                      queryUrl: results.links?.query_url,
                     },
                     null,
                     2,
