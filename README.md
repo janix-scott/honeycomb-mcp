@@ -1,12 +1,14 @@
 # Honeycomb MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server for interacting with Honeycomb observability data. This server enables LLMs like Claude to directly analyze and query your Honeycomb datasets.
+A [Model Context Protocol](https://modelcontextprotocol.io) server for interacting with Honeycomb observability data. This server enables LLMs like Claude to directly analyze and query your Honeycomb datasets across multiple environments.
 
 ## Features
 
-- Query Honeycomb datasets
+- Query Honeycomb datasets across multiple environments
 - Analyze columns and data patterns
 - Run basic analytics queries
+- Monitor SLOs and their status
+- View and analyze Triggers
 - Access dataset metadata and schema information
 
 ## Installation
@@ -18,13 +20,24 @@ npm run build
 
 ## Configuration
 
-Create a configuration file at `~/.hny/config.json` with your Honeycomb API key:
+Create a configuration file at `~/.hny/config.json` with your Honeycomb environments and API keys:
 
 ```json
 {
-  "apiKey": "your_honeycomb_api_key_here"
+  "environments": [
+    {
+      "name": "production",
+      "apiKey": "your_prod_api_key"
+    },
+    {
+      "name": "staging",
+      "apiKey": "your_staging_api_key"
+    }
+  ]
 }
 ```
+
+Each environment entry can also optionally include a `baseUrl` if you're using a different API endpoint.
 
 ## Usage
 
@@ -37,7 +50,7 @@ Add this to your Claude Desktop configuration (`claude_desktop_config.json`):
   "mcpServers": {
     "honeycomb": {
       "command": "node",
-      "args": ["/path/to/build/index.js"]
+      "args": ["/path/to/build/index.mjs"]
     }
   }
 }
@@ -45,26 +58,47 @@ Add this to your Claude Desktop configuration (`claude_desktop_config.json`):
 
 ### Available Tools
 
+- `list-datasets`: List all datasets in an environment
 - `get-columns`: List all columns in a dataset
 - `run-query`: Run basic analytics queries with aggregations
 - `analyze-column`: Get detailed analysis of specific columns
+- `list-slos`: View all SLOs for a dataset
+- `get-slo`: Get detailed SLO status including compliance
+- `list-triggers`: View all triggers for a dataset
+- `get-trigger`: Get detailed trigger information
 
 ### Resources
 
 The server exposes Honeycomb datasets as resources with the URI format:
-`honeycomb://{dataset-slug}`
+`honeycomb://{environment}/{dataset-slug}`
+
+For example:
+- `honeycomb://production/api-requests`
+- `honeycomb://staging/backend-services`
 
 ## Development
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Requirements
 
 - Node.js 16+
-- A Honeycomb API key with query permissions
+- Honeycomb API keys with appropriate permissions:
+  - Query access for analytics
+  - Read access for SLOs and Triggers
+  - Environment-level access for dataset operations
+
+## Example Queries
+
+Ask Claude things like:
+
+- "What datasets are available in the production environment?"
+- "Show me the SLO compliance for the API availability in production"
+- "Are there any active triggers in the staging environment?"
+- "What's the error rate in the production API dataset over the last hour?"
 
 ## License
 
