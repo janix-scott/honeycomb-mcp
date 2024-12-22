@@ -11,6 +11,9 @@
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
     "prepublishOnly": "pnpm run build"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "build",
     "README.md",
