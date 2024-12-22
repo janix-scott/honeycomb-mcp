@@ -3,12 +3,13 @@
   "version": "0.0.1",
   "description": "Model Context Protocol server for Honeycomb",
   "type": "module",
-  "main": "index.js",
+  "main": "build/index.mjs",
   "bin": {
-    "honeycomb-mcp": "./build/index.js"
+    "honeycomb-mcp": "./build/server.js"
   },
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=build/index.mjs",
+    "postbuild": "chmod +x build/index.mjs",
     "prepublishOnly": "pnpm run build"
   },
   "publishConfig": {
@@ -28,7 +29,9 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@total-typescript/tsconfig": "^1.0.4",
     "@types/node": "^22.10.2",
+    "esbuild": "^0.24.2",
     "typescript": "^5.7.2"
   }
 }
