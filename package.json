@@ -1,0 +1,31 @@
+{
+  "name": "@aparkerio/honeycomb-mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Honeycomb",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "honeycomb-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "build",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [],
+  "author": "Austin Parker <austin@ap2.io> (http://aparker.io)",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
