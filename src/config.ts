@@ -1,56 +1,52 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
-import { HoneycombConfig } from "./types/config.js";
 import { z } from "zod";
+import fs from "fs";
+import path from "path";
 
-const ConfigSchema = z.object({
-  environments: z.array(
-    z.object({
-      name: z.string(),
-      apiKey: z.string(),
-      baseUrl: z.string().optional(),
-    }),
-  ),
+export const ConfigSchema = z.object({
+  environments: z.array(z.object({
+    name: z.string(),
+    apiKey: z.string(),
+  })).min(1, "At least one environment must be configured"),
 });
 
-export function loadConfig(): HoneycombConfig {
+export type Config = z.infer<typeof ConfigSchema>;
+
+function findConfigFile(): string {
+  const configPaths = [
+    // Look in standard locations
+    ".mcp-honeycomb.json",
+    path.join(process.cwd(), ".mcp-honeycomb.json"),
+    path.join(process.env.HOME || "~", ".mcp-honeycomb.json"),
+    // Allow overriding with env var
+    process.env.MCP_HONEYCOMB_CONFIG,
+  ].filter(Boolean);
+
+  const foundPath = configPaths.find(p => p && fs.existsSync(p));
+  if (!foundPath) {
+    throw new Error(
+      "Configuration file not found. Please create .mcp-honeycomb.json with your environments and API keys"
+    );
+  }
+  return foundPath;
+}
+
+export function loadConfig(): Config {
+  // Try to load from config file
+  const configPath = findConfigFile(); // This will now throw if no file found
+  
   try {
-    const configPath = join(homedir(), ".hny", "config.json");
-    const configFile = readFileSync(configPath, "utf-8");
-    const config = JSON.parse(configFile);
-
-    // Validate config against schema
-    const validatedConfig = ConfigSchema.parse(config);
-
-    if (validatedConfig.environments.length === 0) {
-      throw new Error("No environments configured");
-    }
-
-    // Check for duplicate environment names
-    const names = new Set<string>();
-    for (const env of validatedConfig.environments) {
-      if (names.has(env.name)) {
-        throw new Error(`Duplicate environment name: ${env.name}`);
-      }
-      names.add(env.name);
-    }
-
-    return validatedConfig;
+    const fileConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    return ConfigSchema.parse(fileConfig);
   } catch (error) {
     if (error instanceof z.ZodError) {
+      const issues = error.issues.map(i => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
       throw new Error(
-        "Invalid config format in ~/.hny/config.json: " +
-          error.errors
-            .map((e) => `${e.path.join(".")}: ${e.message}`)
-            .join(", "),
+        `Configuration error:\n${issues}\n\nExample config file:\n{\n  "environments": [\n    {\n      "name": "prod",\n      "apiKey": "your_api_key"\n    }\n  ]\n}`
       );
     }
-
-    throw new Error(
-      "Could not load config from ~/.hny/config.json. " +
-        "Please create this file with your Honeycomb environments: " +
-        '{"environments": [{"name": "env-name", "apiKey": "your_key_here"}]}',
-    );
+    if (error instanceof SyntaxError) {
+      console.error(`Failed to parse config file ${configPath}`);
+    }
+    throw error;
   }
 }

@@ -13,13 +13,14 @@ import { SLO, SLODetailedResponse } from "../types/slo.js";
 import { TriggerResponse } from "../types/trigger.js";
 import { HoneycombEnvironment } from "../types/config.js";
 import { QueryOptions } from "../types/api.js";
+import { Config } from "../config.js";
 
 export class HoneycombAPI {
-  private readonly environments: Map<string, HoneycombEnvironment>;
+  private environments: Map<string, { apiKey: string }>;
 
-  constructor(config: HoneycombConfig) {
+  constructor(config: Config) {
     this.environments = new Map(
-      config.environments.map((env) => [env.name, env]),
+      config.environments.map(env => [env.name, { apiKey: env.apiKey }])
     );
   }
 
@@ -27,20 +28,25 @@ export class HoneycombAPI {
     return Array.from(this.environments.keys());
   }
 
+  private getApiKey(environment: string): string {
+    const env = this.environments.get(environment);
+    if (!env) {
+      throw new Error(
+        `Unknown environment: "${environment}". Available environments: ${Array.from(this.environments.keys()).join(", ")}`
+      );
+    }
+    return env.apiKey;
+  }
+
   private async request<T>(
     environment: string,
     path: string,
     options: RequestInit & { params?: Record<string, any> } = {},
   ): Promise<T> {
-    const env = this.environments.get(environment);
-    if (!env) {
-      throw new Error(`Unknown environment: ${environment}`);
-    }
-
-    const baseUrl = env.baseUrl || "https://api.honeycomb.io";
+    const apiKey = this.getApiKey(environment);
     const { params, ...requestOptions } = options;
 
-    let url = `${baseUrl}${path}`;
+    let url = `https://api.honeycomb.io${path}`;
     if (params) {
       const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
@@ -54,7 +60,7 @@ export class HoneycombAPI {
     const response = await fetch(url, {
       ...requestOptions,
       headers: {
-        "X-Honeycomb-Team": env.apiKey,
+        "X-Honeycomb-Team": apiKey,
         "Content-Type": "application/json",
         ...options.headers,
       },
@@ -72,10 +78,12 @@ export class HoneycombAPI {
 
   // Dataset methods
   async getDataset(environment: string, datasetSlug: string): Promise<Dataset> {
+    const apiKey = this.getApiKey(environment);
     return this.request(environment, `/1/datasets/${datasetSlug}`);
   }
 
   async listDatasets(environment: string): Promise<Dataset[]> {
+    const apiKey = this.getApiKey(environment);
     return this.request(environment, "/1/datasets");
   }
 
@@ -85,6 +93,7 @@ export class HoneycombAPI {
     datasetSlug: string,
     query: AnalysisQuery,
   ): Promise<{ id: string }> {
+    const apiKey = this.getApiKey(environment);
     return this.request<{ id: string }>(
       environment,
       `/1/queries/${datasetSlug}`,
@@ -100,6 +109,7 @@ export class HoneycombAPI {
     datasetSlug: string,
     queryId: string,
   ): Promise<{ id: string }> {
+    const apiKey = this.getApiKey(environment);
     return this.request<{ id: string }>(
       environment,
       `/1/query_results/${datasetSlug}`,
@@ -116,6 +126,7 @@ export class HoneycombAPI {
     queryResultId: string,
     includeSeries: boolean = false,
   ): Promise<QueryResult> {
+    const apiKey = this.getApiKey(environment);
     const response = await this.request<QueryResult>(
       environment,
       `/1/query_results/${datasetSlug}/${queryResultId}`,
@@ -141,6 +152,7 @@ export class HoneycombAPI {
     maxAttempts = 10,
     options: QueryOptions = {},
   ): Promise<QueryResult> {
+    const apiKey = this.getApiKey(environment);
     const defaultLimit = 100;
     const queryWithLimit = {
       ...query,
@@ -182,6 +194,7 @@ export class HoneycombAPI {
     environment: string,
     datasetSlug: string,
   ): Promise<Column[]> {
+    const apiKey = this.getApiKey(environment);
     return this.request(environment, `/1/columns/${datasetSlug}`);
   }
 
@@ -190,6 +203,7 @@ export class HoneycombAPI {
     datasetSlug: string,
     keyName: string,
   ): Promise<Column> {
+    const apiKey = this.getApiKey(environment);
     return this.request(
       environment,
       `/1/columns/${datasetSlug}?key_name=${encodeURIComponent(keyName)}`,
@@ -200,6 +214,7 @@ export class HoneycombAPI {
     environment: string,
     datasetSlug: string,
   ): Promise<Column[]> {
+    const apiKey = this.getApiKey(environment);
     const columns = await this.getColumns(environment, datasetSlug);
     return columns.filter((column) => !column.hidden);
   }
@@ -209,6 +224,7 @@ export class HoneycombAPI {
     datasetSlug: string,
     params: z.infer<typeof QueryToolSchema>,
   ) {
+    const apiKey = this.getApiKey(environment);
     const query: AnalysisQuery = {
       calculations: params.calculations,
       breakdowns: params.breakdowns || [],
@@ -248,6 +264,7 @@ export class HoneycombAPI {
     datasetSlug: string,
     params: z.infer<typeof ColumnAnalysisSchema>,
   ) {
+    const apiKey = this.getApiKey(environment);
     const column = await this.getColumnByName(
       environment,
       datasetSlug,
@@ -298,6 +315,7 @@ export class HoneycombAPI {
   }
 
   async getSLOs(environment: string, datasetSlug: string): Promise<SLO[]> {
+    const apiKey = this.getApiKey(environment);
     return this.request<SLO[]>(environment, `/1/slos/${datasetSlug}`);
   }
 
@@ -306,6 +324,7 @@ export class HoneycombAPI {
     datasetSlug: string,
     sloId: string,
   ): Promise<SLODetailedResponse> {
+    const apiKey = this.getApiKey(environment);
     return this.request<SLODetailedResponse>(
       environment,
       `/1/slos/${datasetSlug}/${sloId}`,
@@ -317,6 +336,7 @@ export class HoneycombAPI {
     environment: string,
     datasetSlug: string,
   ): Promise<TriggerResponse[]> {
+    const apiKey = this.getApiKey(environment);
     return this.request<TriggerResponse[]>(
       environment,
       `/1/triggers/${datasetSlug}`,
@@ -328,6 +348,7 @@ export class HoneycombAPI {
     datasetSlug: string,
     triggerId: string,
   ): Promise<TriggerResponse> {
+    const apiKey = this.getApiKey(environment);
     return this.request<TriggerResponse>(
       environment,
       `/1/triggers/${datasetSlug}/${triggerId}`,

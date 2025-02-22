@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const DatasetArgumentsSchema = z.object({
+  environment: z.string(),
   dataset: z.string(),
 });
 
@@ -14,6 +15,7 @@ export const ColumnInfoSchema = z.object({
 
 // Input validation schemas using zod
 export const QueryInputSchema = z.object({
+  environment: z.string(),
   dataset: z.string(),
   timeRange: z.number().optional(),
   filter: z.record(z.any()).optional(),
@@ -23,6 +25,7 @@ export const QueryInputSchema = z.object({
 
 // Tool definition schemas
 export const queryToolSchema = z.object({
+  environment: z.string(),
   dataset: z.string(),
   query: z.record(z.any()),
 });
@@ -122,6 +125,7 @@ export const QueryToolSchema = z.object({
 });
 
 export const ColumnAnalysisSchema = z.object({
+  environment: z.string(),
   dataset: z.string(),
   column: z.string(),
   timeRange: z.number().optional(),
@@ -142,11 +146,13 @@ export const PromptSchema = z.object({
 });
 
 export const SLOArgumentsSchema = z.object({
+  environment: z.string(),
   dataset: z.string(),
   sloId: z.string(),
 });
 
 export const TriggerArgumentsSchema = z.object({
+  environment: z.string(),
   dataset: z.string(),
   triggerId: z.string(),
 });

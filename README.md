@@ -6,7 +6,10 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for interacti
 
 - Query Honeycomb datasets across multiple environments
 - Analyze columns and data patterns
-- Run basic analytics queries
+- Run analytics queries with support for:
+  - Multiple calculation types (COUNT, AVG, P95, etc.)
+  - Breakdowns and filters
+  - Time-based analysis
 - Monitor SLOs and their status
 - View and analyze Triggers
 - Access dataset metadata and schema information
@@ -14,14 +17,18 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for interacti
 ## Installation
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Configuration
 
-Create a configuration file at `~/.hny/config.json` with your Honeycomb environments and API keys:
+Create a configuration file at `.mcp-honeycomb.json` in one of these locations:
+- Current directory
+- Home directory (`~/.mcp-honeycomb.json`)
+- Custom location specified by `MCP_HONEYCOMB_CONFIG` environment variable
 
+Example configuration:
 ```json
 {
   "environments": [
@@ -37,44 +44,108 @@ Create a configuration file at `~/.hny/config.json` with your Honeycomb environm
 }
 ```
 
-Each environment entry can also optionally include a `baseUrl` if you're using a different API endpoint.
-
 ## Usage
 
-### With Claude Desktop
+### With Claude or other MCP Clients
 
-Add this to your Claude Desktop configuration (`claude_desktop_config.json`):
+The server exposes both resources and tools for interacting with Honeycomb data.
 
-```json
-{
-  "mcpServers": {
-    "honeycomb": {
-      "command": "node",
-      "args": ["/path/to/build/index.mjs"]
-    }
-  }
-}
-```
+#### Resources
 
-### Available Tools
-
-- `list-datasets`: List all datasets in an environment
-- `get-columns`: List all columns in a dataset
-- `run-query`: Run basic analytics queries with aggregations
-- `analyze-column`: Get detailed analysis of specific columns
-- `list-slos`: View all SLOs for a dataset
-- `get-slo`: Get detailed SLO status including compliance
-- `list-triggers`: View all triggers for a dataset
-- `get-trigger`: Get detailed trigger information
-
-### Resources
-
-The server exposes Honeycomb datasets as resources with the URI format:
-`honeycomb://{environment}/{dataset-slug}`
+Access Honeycomb datasets using URIs in the format:
+`honeycomb://{environment}/{dataset}`
 
 For example:
 - `honeycomb://production/api-requests`
 - `honeycomb://staging/backend-services`
+
+The resource response includes:
+- Dataset name
+- Column information (name, type, description)
+- Schema details
+
+#### Tools
+
+- `list_datasets`: List all datasets in an environment
+  ```json
+  { "environment": "production" }
+  ```
+
+- `get_columns`: Get column information for a dataset
+  ```json
+  {
+    "environment": "production",
+    "dataset": "api-requests"
+  }
+  ```
+
+- `run_query`: Run analytics queries with rich options
+  ```json
+  {
+    "environment": "production",
+    "dataset": "api-requests",
+    "calculations": [
+      { "op": "COUNT" },
+      { "op": "P95", "column": "duration_ms" }
+    ],
+    "breakdowns": ["service.name"],
+    "time_range": 3600
+  }
+  ```
+
+- `analyze_column`: Get statistical analysis of a column
+  ```json
+  {
+    "environment": "production",
+    "dataset": "api-requests",
+    "column": "duration_ms"
+  }
+  ```
+
+- `list_slos`: List all SLOs for a dataset
+  ```json
+  {
+    "environment": "production",
+    "dataset": "api-requests"
+  }
+  ```
+
+- `get_slo`: Get detailed SLO information
+  ```json
+  {
+    "environment": "production",
+    "dataset": "api-requests",
+    "sloId": "abc123"
+  }
+  ```
+
+- `list_triggers`: List all triggers for a dataset
+  ```json
+  {
+    "environment": "production",
+    "dataset": "api-requests"
+  }
+  ```
+
+- `get_trigger`: Get detailed trigger information
+  ```json
+  {
+    "environment": "production",
+    "dataset": "api-requests",
+    "triggerId": "xyz789"
+  }
+  ```
+
+### Example Queries
+
+Ask Claude things like:
+
+- "What datasets are available in the production environment?"
+- "Show me the P95 latency for the API service over the last hour"
+- "What's the error rate broken down by service name?"
+- "Are there any SLOs close to breaching their budget?"
+- "Show me all active triggers in the staging environment"
+- "What columns are available in the production API dataset?"
 
 ## Development
 
@@ -90,15 +161,6 @@ pnpm run build
   - Query access for analytics
   - Read access for SLOs and Triggers
   - Environment-level access for dataset operations
-
-## Example Queries
-
-Ask Claude things like:
-
-- "What datasets are available in the production environment?"
-- "Show me the SLO compliance for the API availability in production"
-- "Are there any active triggers in the staging environment?"
-- "What's the error rate in the production API dataset over the last hour?"
 
 ## License
 
