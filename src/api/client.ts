@@ -225,26 +225,40 @@ export class HoneycombAPI {
     params: z.infer<typeof QueryToolSchema>,
   ) {
     const apiKey = this.getApiKey(environment);
+    
+    // Build the query with enhanced validation based on specs
     const query: AnalysisQuery = {
       calculations: params.calculations,
       breakdowns: params.breakdowns || [],
       filters: params.filters,
       filter_combination: params.filter_combination,
-      time_range: params.time_range || 3600,
       orders: params.orders,
       limit: params.limit,
+      having: params.having,
+      
+      // Time-related parameters
+      // The prompt.txt spec notes that time_range is relative and can be 
+      // combined with either start_time or end_time but not both
+      time_range: params.time_range,
       start_time: params.start_time,
       end_time: params.end_time,
       granularity: params.granularity,
-      having: params.having,
     };
 
     try {
+      // For complex queries, we should increase the default limit if not specified
+      const defaultLimit = 100; 
+      const queryWithLimit = {
+        ...query,
+        limit: query.limit || defaultLimit,
+      };
+
       const results = await this.queryAndWaitForResults(
         environment,
         datasetSlug,
-        query,
+        queryWithLimit,
       );
+      
       return {
         data: {
           results: results.data?.results || [],

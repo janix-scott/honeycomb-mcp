@@ -102,7 +102,31 @@ export const QueryCalculationSchema = z.object({
 });
 
 export const HavingSchema = z.object({
-  calculate_op: z.string(),
+  calculate_op: z.enum([
+    "COUNT",
+    "CONCURRENCY",
+    "SUM",
+    "AVG",
+    "COUNT_DISTINCT",
+    "MAX",
+    "MIN",
+    "P001",
+    "P01",
+    "P05",
+    "P10",
+    "P20",
+    "P25",
+    "P50",
+    "P75",
+    "P80",
+    "P90",
+    "P95",
+    "P99",
+    "P999",
+    "RATE_AVG",
+    "RATE_SUM",
+    "RATE_MAX"
+  ]),
   column: z.string().optional(),
   op: z.enum(["=", "!=", ">", ">=", "<", "<="]),
   value: z.number(),
