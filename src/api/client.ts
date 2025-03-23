@@ -5,13 +5,11 @@ import {
   QueryCalculation,
 } from "../types/query.js";
 import { QueryToolSchema, ColumnAnalysisSchema } from "../types/schema.js";
-import { HoneycombConfig } from "../types/config.js";
 import { HoneycombError } from "../utils/errors.js";
 import { Column } from "../types/column.js";
 import { Dataset } from "../types/api.js";
 import { SLO, SLODetailedResponse } from "../types/slo.js";
 import { TriggerResponse } from "../types/trigger.js";
-import { HoneycombEnvironment } from "../types/config.js";
 import { QueryOptions } from "../types/api.js";
 import { Config } from "../config.js";
 
@@ -80,12 +78,10 @@ export class HoneycombAPI {
 
   // Dataset methods
   async getDataset(environment: string, datasetSlug: string): Promise<Dataset> {
-    const apiKey = this.getApiKey(environment);
     return this.request(environment, `/1/datasets/${datasetSlug}`);
   }
 
   async listDatasets(environment: string): Promise<Dataset[]> {
-    const apiKey = this.getApiKey(environment);
     return this.request(environment, "/1/datasets");
   }
 
@@ -128,7 +124,6 @@ export class HoneycombAPI {
     queryResultId: string,
     includeSeries: boolean = false,
   ): Promise<QueryResult> {
-    const apiKey = this.getApiKey(environment);
     const response = await this.request<QueryResult>(
       environment,
       `/1/query_results/${datasetSlug}/${queryResultId}`,
@@ -154,7 +149,6 @@ export class HoneycombAPI {
     maxAttempts = 10,
     options: QueryOptions = {},
   ): Promise<QueryResult> {
-    const apiKey = this.getApiKey(environment);
     const defaultLimit = 100;
     const queryWithLimit = {
       ...query,
@@ -196,7 +190,6 @@ export class HoneycombAPI {
     environment: string,
     datasetSlug: string,
   ): Promise<Column[]> {
-    const apiKey = this.getApiKey(environment);
     return this.request(environment, `/1/columns/${datasetSlug}`);
   }
 
@@ -205,7 +198,6 @@ export class HoneycombAPI {
     datasetSlug: string,
     keyName: string,
   ): Promise<Column> {
-    const apiKey = this.getApiKey(environment);
     return this.request(
       environment,
       `/1/columns/${datasetSlug}?key_name=${encodeURIComponent(keyName)}`,
@@ -216,7 +208,6 @@ export class HoneycombAPI {
     environment: string,
     datasetSlug: string,
   ): Promise<Column[]> {
-    const apiKey = this.getApiKey(environment);
     const columns = await this.getColumns(environment, datasetSlug);
     return columns.filter((column) => !column.hidden);
   }
@@ -226,8 +217,6 @@ export class HoneycombAPI {
     datasetSlug: string,
     params: z.infer<typeof QueryToolSchema>,
   ) {
-    const apiKey = this.getApiKey(environment);
-    
     // Build the query with enhanced validation based on specs
     const query: AnalysisQuery = {
       calculations: params.calculations,
@@ -280,7 +269,6 @@ export class HoneycombAPI {
     datasetSlug: string,
     params: z.infer<typeof ColumnAnalysisSchema>,
   ) {
-    const apiKey = this.getApiKey(environment);
     const column = await this.getColumnByName(
       environment,
       datasetSlug,
@@ -331,7 +319,6 @@ export class HoneycombAPI {
   }
 
   async getSLOs(environment: string, datasetSlug: string): Promise<SLO[]> {
-    const apiKey = this.getApiKey(environment);
     return this.request<SLO[]>(environment, `/1/slos/${datasetSlug}`);
   }
 
@@ -340,7 +327,6 @@ export class HoneycombAPI {
     datasetSlug: string,
     sloId: string,
   ): Promise<SLODetailedResponse> {
-    const apiKey = this.getApiKey(environment);
     return this.request<SLODetailedResponse>(
       environment,
       `/1/slos/${datasetSlug}/${sloId}`,
@@ -352,7 +338,6 @@ export class HoneycombAPI {
     environment: string,
     datasetSlug: string,
   ): Promise<TriggerResponse[]> {
-    const apiKey = this.getApiKey(environment);
     return this.request<TriggerResponse[]>(
       environment,
       `/1/triggers/${datasetSlug}`,
@@ -364,7 +349,6 @@ export class HoneycombAPI {
     datasetSlug: string,
     triggerId: string,
   ): Promise<TriggerResponse> {
-    const apiKey = this.getApiKey(environment);
     return this.request<TriggerResponse>(
       environment,
       `/1/triggers/${datasetSlug}/${triggerId}`,
