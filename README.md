@@ -2,17 +2,9 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for interacting with Honeycomb observability data. This server enables LLMs like Claude to directly analyze and query your Honeycomb datasets across multiple environments.
 
-## Features
+## Honeycomb Enterprise Only
 
-- Query Honeycomb datasets across multiple environments
-- Analyze columns and data patterns
-- Run analytics queries with support for:
-  - Multiple calculation types (COUNT, AVG, P95, etc.)
-  - Breakdowns and filters
-  - Time-based analysis
-- Monitor SLOs and their status
-- View and analyze Triggers
-- Access dataset metadata and schema information
+Currently, this is only available for Honeycomb Enterprise customers.
 
 ## Installation
 
@@ -21,9 +13,12 @@ pnpm install
 pnpm run build
 ```
 
-## Configuration
+The build artifact goes into the `/build` folder.
+
+## Honeycomb Configuration
 
 Create a configuration file at `.mcp-honeycomb.json` in one of these locations:
+
 - Current directory
 - Home directory (`~/.mcp-honeycomb.json`)
 - Custom location specified by `MCP_HONEYCOMB_CONFIG` environment variable
@@ -44,11 +39,43 @@ Example configuration:
 }
 ```
 
-## Usage
+**This configuration is required to use the Honeycomb MCP Server.**
 
-### With Claude or other MCP Clients
+## MCP Configuration
 
-The server exposes both resources and tools for interacting with Honeycomb data.
+You'll need to run `node` on the location of the build artifact:
+
+```json
+{
+    "mcpServers": {
+      "honeycomb": {
+        "command": "node",
+        "args": [
+          "/fully/qualified/path/to/build/index.mjs"
+        ]
+      }
+    }
+}
+```
+
+The above configuration has been shown to work for:
+
+- Claude Desktop
+- Claude Code
+- Cursor
+- Windsurf
+
+## Features
+
+- Query Honeycomb datasets across multiple environments
+- Run analytics queries with support for:
+  - Multiple calculation types (COUNT, AVG, P95, etc.)
+  - Breakdowns and filters
+  - Time-based analysis
+- Monitor SLOs and their status (Enterprise only)
+- Analyze columns and data patterns
+- View and analyze Triggers
+- Access dataset metadata and schema information
 
 #### Resources
 
