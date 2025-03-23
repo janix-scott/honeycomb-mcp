@@ -19,11 +19,12 @@ The build artifact goes into the `/build` folder.
 
 Create a configuration file at `.mcp-honeycomb.json` in one of these locations:
 
-- Current directory
-- Home directory (`~/.mcp-honeycomb.json`)
+- Current directory (recommended)
+- Home directory (`~/` on macos, for example)
 - Custom location specified by `MCP_HONEYCOMB_CONFIG` environment variable
 
 Example configuration:
+
 ```json
 {
   "environments": [
@@ -43,7 +44,7 @@ Example configuration:
 
 ## MCP Configuration
 
-You'll need to run `node` on the location of the build artifact:
+You'll need to run `node` on the location of the build artifact and specify the location of your Honeycomb MCP config.
 
 ```json
 {
@@ -51,12 +52,17 @@ You'll need to run `node` on the location of the build artifact:
       "honeycomb": {
         "command": "node",
         "args": [
-          "/fully/qualified/path/to/build/index.mjs"
-        ]
+          "/fully/qualified/path/to/honeycomb-mcp/build/index.mjs"
+        ],
+        "env": {
+          "MCP_HONEYCOMB_CONFIG": "/fully/qualified/path/to/.mcp-honeycomb.json"
+        }
       }
     }
 }
 ```
+
+You can omit the `env` section if you have a more central installation, but it's recommended to have a config file per codebase.
 
 The above configuration has been tested with the following clients:
 
