@@ -58,12 +58,14 @@ You'll need to run `node` on the location of the build artifact:
 }
 ```
 
-The above configuration has been shown to work for:
+The above configuration has been tested with the following clients:
 
-- Claude Desktop
-- Claude Code
-- Cursor
-- Windsurf
+- [Claude Desktop](https://modelcontextprotocol.io/quickstart/user)
+- [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/tutorials#set-up-model-context-protocol-mcp)
+- [Cursor](https://docs.cursor.com/context/model-context-protocol)
+- [Windsurf](https://docs.codeium.com/windsurf/mcp)
+
+It will likely work with other clients.
 
 ## Features
 
