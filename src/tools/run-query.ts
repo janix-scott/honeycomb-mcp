@@ -83,10 +83,99 @@ function validateQueryParameters(params: z.infer<typeof QueryToolSchema>): void 
     }
   }
   
-  // Handle time parameters
+  // Handle time parameters based on Honeycomb API specifications
+  
+  // 1. Validate time-related parameters
   if (params.start_time && params.end_time && params.time_range) {
     // Cannot have all three
     throw new Error("Cannot specify time_range, start_time, and end_time simultaneously. Use time_range with either start_time or end_time, or use start_time and end_time without time_range.");
+  }
+  
+  // 2. Validate granularity parameter
+  if (params.granularity !== undefined) {
+    // When using granularity, we need a time window (either time_range or start_time+end_time)
+    if (!params.time_range && !(params.start_time && params.end_time)) {
+      throw new Error("When using granularity, you must specify either time_range or both start_time and end_time to define the time window.");
+    }
+    
+    // Granularity must be a positive integer
+    if (params.granularity <= 0 || !Number.isInteger(params.granularity)) {
+      throw new Error("Granularity value must be a positive integer representing seconds.");
+    }
+    
+    // Validate granularity isn't too small for the time window
+    if (params.time_range && params.granularity < Math.max(1, Math.floor(params.time_range / 300))) {
+      // For larger time ranges, granularity shouldn't create too many data points (max ~300 points is reasonable)
+      throw new Error(`Granularity value (${params.granularity}s) is too small for the requested time range (${params.time_range}s). This would create too many data points for the API to process efficiently.`);
+    }
+    
+    // For start_time/end_time combination
+    if (params.start_time && params.end_time) {
+      const timeWindowSeconds = Math.abs(params.end_time - params.start_time);
+      if (params.granularity < Math.max(1, Math.floor(timeWindowSeconds / 300))) {
+        throw new Error(`Granularity value (${params.granularity}s) is too small for the requested time window (${timeWindowSeconds}s). This would create too many data points for the API to process efficiently.`);
+      }
+    }
+  }
+}
+
+/**
+ * Helper function to execute a query and process the results
+ */
+async function executeQuery(
+  api: HoneycombAPI, 
+  params: z.infer<typeof QueryToolSchema>,
+  hasHeatmap: boolean
+) {
+  // Execute the query
+  const result = await api.runAnalysisQuery(params.environment, params.dataset, params);
+  
+  try {
+    // Simplify the response to reduce context window usage
+    const simplifiedResponse = {
+      results: result.data?.results || [],
+      // Only include series data if heatmap calculation is present (it's usually large)
+      ...(hasHeatmap ? { series: result.data?.series || [] } : {}),
+      
+      // Include a query URL if available 
+      query_url: result.links?.query_url || null,
+      
+      // Add summary statistics for numeric columns
+      summary: summarizeResults(result.data?.results || [], params),
+      
+      // Add query metadata for context
+      metadata: {
+        environment: params.environment,
+        dataset: params.dataset,
+        executedAt: new Date().toISOString(),
+        resultCount: result.data?.results?.length || 0
+      }
+    };
+    
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(simplifiedResponse, null, 2),
+        },
+      ],
+    };
+  } catch (processingError) {
+    // Handle result processing errors separately to still return partial results
+    console.error("Error processing query results:", processingError);
+    
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            results: result.data?.results || [],
+            query_url: result.links?.query_url || null,
+            error: `Error processing results: ${processingError instanceof Error ? processingError.message : String(processingError)}`
+          }, null, 2),
+        },
+      ],
+    };
   }
 }
 
@@ -117,56 +206,27 @@ export function createRunQueryTool(api: HoneycombAPI) {
         // Check for heatmap calculations to determine if series data should be included
         const hasHeatmap = params.calculations.some(calc => calc.op === "HEATMAP");
 
-        // Execute the query
-        const result = await api.runAnalysisQuery(params.environment, params.dataset, params);
+        // Execute the query with retry logic for transient API issues
+        const maxRetries = 3;
+        let lastError: unknown = null;
         
-        try {
-          // Simplify the response to reduce context window usage
-          const simplifiedResponse = {
-            results: result.data?.results || [],
-            // Only include series data if heatmap calculation is present (it's usually large)
-            ...(hasHeatmap ? { series: result.data?.series || [] } : {}),
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            return await executeQuery(api, params, hasHeatmap);
+          } catch (error) {
+            lastError = error;
+            console.error(`Query attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}`);
             
-            // Include a query URL if available 
-            query_url: result.links?.query_url || null,
-            
-            // Add summary statistics for numeric columns
-            summary: summarizeResults(result.data?.results || [], params),
-            
-            // Add query metadata for context
-            metadata: {
-              environment: params.environment,
-              dataset: params.dataset,
-              executedAt: new Date().toISOString(),
-              resultCount: result.data?.results?.length || 0
+            // Only retry if not the last attempt
+            if (attempt < maxRetries) {
+              console.error(`Retrying in ${attempt * 500}ms...`);
+              await new Promise(resolve => setTimeout(resolve, attempt * 500));
             }
-          };
-          
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(simplifiedResponse, null, 2),
-              },
-            ],
-          };
-        } catch (processingError) {
-          // Handle result processing errors separately to still return partial results
-          console.error("Error processing query results:", processingError);
-          
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  results: result.data?.results || [],
-                  query_url: result.links?.query_url || null,
-                  error: `Error processing results: ${processingError instanceof Error ? processingError.message : String(processingError)}`
-                }, null, 2),
-              },
-            ],
-          };
+          }
         }
+        
+        // If we get here, all attempts failed
+        throw lastError || new Error("All query attempts failed");
       } catch (error) {
         return handleToolError(error, "run_query");
       }

@@ -11,6 +11,9 @@ import { Dataset } from "../types/api.js";
 import { SLO, SLODetailedResponse } from "../types/slo.js";
 import { TriggerResponse } from "../types/trigger.js";
 import { QueryOptions } from "../types/api.js";
+import { Board, BoardsResponse } from "../types/board.js";
+import { Marker, MarkersResponse } from "../types/marker.js";
+import { Recipient, RecipientsResponse } from "../types/recipient.js";
 import { Config } from "../config.js";
 
 export class HoneycombAPI {
@@ -244,6 +247,14 @@ export class HoneycombAPI {
         limit: query.limit || defaultLimit,
       };
 
+      // Cleanup: Remove undefined parameters to avoid API validation errors
+      Object.keys(queryWithLimit).forEach(key => {
+        const typedKey = key as keyof typeof queryWithLimit;
+        if (queryWithLimit[typedKey] === undefined) {
+          delete queryWithLimit[typedKey];
+        }
+      });
+
       const results = await this.queryAndWaitForResults(
         environment,
         datasetSlug,
@@ -258,6 +269,27 @@ export class HoneycombAPI {
         links: results.links,
       };
     } catch (error) {
+      // Provide more specific error messages for common API errors
+      if (error instanceof HoneycombError) {
+        if (error.statusCode === 422) {
+          // Unprocessable Entity - likely parameter validation issues
+          let errorMessage = "Query validation failed: ";
+          
+          // Check for common issues with granularity
+          if (params.granularity !== undefined) {
+            errorMessage += "The granularity parameter might be causing issues. Try: ";
+            errorMessage += "\n1. Ensure you're specifying a time window (time_range or start_time+end_time)";
+            errorMessage += "\n2. Make sure granularity value isn't too small for your time window";
+            errorMessage += "\n3. Consider removing granularity and other advanced parameters for a simpler query first";
+          } else {
+            errorMessage += "Try simplifying your query parameters";
+          }
+          
+          throw new Error(errorMessage);
+        }
+      }
+      
+      // Default error message
       throw new Error(
         `Analysis query failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
@@ -353,5 +385,53 @@ export class HoneycombAPI {
       environment,
       `/1/triggers/${datasetSlug}/${triggerId}`,
     );
+  }
+
+  // Board methods
+  async getBoards(environment: string): Promise<Board[]> {
+    try {
+      // Make the request to the boards endpoint
+      const response = await this.request<any>(environment, "/1/boards");
+      
+      // Check if response is already an array (API might return array directly)
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      // Check if response has a boards property (expected structure)
+      if (response && response.boards && Array.isArray(response.boards)) {
+        return response.boards;
+      }
+      
+      // If we get here, the response doesn't match either expected format
+      return [];
+    } catch (error) {
+      // Return empty array instead of throwing to prevent breaking the application
+      return [];
+    }
+  }
+
+  async getBoard(environment: string, boardId: string): Promise<Board> {
+    return this.request<Board>(environment, `/1/boards/${boardId}`);
+  }
+
+  // Marker methods
+  async getMarkers(environment: string): Promise<Marker[]> {
+    const response = await this.request<MarkersResponse>(environment, "/1/markers");
+    return response.markers;
+  }
+
+  async getMarker(environment: string, markerId: string): Promise<Marker> {
+    return this.request<Marker>(environment, `/1/markers/${markerId}`);
+  }
+
+  // Recipient methods
+  async getRecipients(environment: string): Promise<Recipient[]> {
+    const response = await this.request<RecipientsResponse>(environment, "/1/recipients");
+    return response.recipients;
+  }
+
+  async getRecipient(environment: string, recipientId: string): Promise<Recipient> {
+    return this.request<Recipient>(environment, `/1/recipients/${recipientId}`);
   }
 }
