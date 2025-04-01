@@ -180,7 +180,7 @@ async function executeQuery(
 }
 
 /**
- * Creates a tool for running queries against a Honeycomb dataset
+ * Creates a tool for running queries against a Honeycomb dataset or environment.
  * 
  * This tool handles construction, validation, execution, and summarization of
  * Honeycomb queries, returning both raw results and useful statistical summaries.
@@ -191,7 +191,7 @@ async function executeQuery(
 export function createRunQueryTool(api: HoneycombAPI) {
   return {
     name: "run_query",
-    description: "Executes a Honeycomb query against a dataset, performing validation and returning raw results along with statistical summaries. This tool handles construction, validation, execution, and summarization of Honeycomb queries.",
+    description: `Executes a Honeycomb query against a dataset or environment, performing validation and returning raw results along with statistical summaries. This tool handles construction, validation, execution, and summarization of Honeycomb queries. NOTE: use __all__ as a dataset name to run a query against an environment.`,
     schema: QueryToolSchema.shape,
     /**
      * Handles the run_query tool request
