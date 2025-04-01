@@ -6,6 +6,7 @@ export const ConfigSchema = z.object({
   environments: z.array(z.object({
     name: z.string(),
     apiKey: z.string(),
+    apiEndpoint: z.string().optional(),
   })).min(1, "At least one environment must be configured"),
 });
 
@@ -41,7 +42,7 @@ export function loadConfig(): Config {
     if (error instanceof z.ZodError) {
       const issues = error.issues.map(i => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
       throw new Error(
-        `Configuration error:\n${issues}\n\nExample config file:\n{\n  "environments": [\n    {\n      "name": "prod",\n      "apiKey": "your_api_key"\n    }\n  ]\n}`
+        `Configuration error:\n${issues}\n\nExample config file:\n{\n  "environments": [\n    {\n      "name": "prod",\n      "apiKey": "your_api_key",\n      "apiEndpoint": "https://api.honeycomb.io"\n    }\n  ]\n}`
       );
     }
     if (error instanceof SyntaxError) {

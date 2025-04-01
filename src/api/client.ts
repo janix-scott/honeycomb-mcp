@@ -17,11 +17,15 @@ import { Recipient, RecipientsResponse } from "../types/recipient.js";
 import { Config } from "../config.js";
 
 export class HoneycombAPI {
-  private environments: Map<string, { apiKey: string }>;
+  private environments: Map<string, { apiKey: string; apiEndpoint?: string }>;
+  private defaultApiEndpoint = "https://api.honeycomb.io";
 
   constructor(config: Config) {
     this.environments = new Map(
-      config.environments.map(env => [env.name, { apiKey: env.apiKey }])
+      config.environments.map(env => [env.name, { 
+        apiKey: env.apiKey,
+        apiEndpoint: env.apiEndpoint
+      }])
     );
   }
 
@@ -39,15 +43,26 @@ export class HoneycombAPI {
     return env.apiKey;
   }
 
+  private getApiEndpoint(environment: string): string {
+    const env = this.environments.get(environment);
+    if (!env) {
+      throw new Error(
+        `Unknown environment: "${environment}". Available environments: ${Array.from(this.environments.keys()).join(", ")}`
+      );
+    }
+    return env.apiEndpoint || this.defaultApiEndpoint;
+  }
+
   private async request<T>(
     environment: string,
     path: string,
     options: RequestInit & { params?: Record<string, any> } = {},
   ): Promise<T> {
     const apiKey = this.getApiKey(environment);
+    const apiEndpoint = this.getApiEndpoint(environment);
     const { params, ...requestOptions } = options;
 
-    let url = `https://api.honeycomb.io${path}`;
+    let url = `${apiEndpoint}${path}`;
     if (params) {
       const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
@@ -94,7 +109,6 @@ export class HoneycombAPI {
     datasetSlug: string,
     query: AnalysisQuery,
   ): Promise<{ id: string }> {
-    const apiKey = this.getApiKey(environment);
     return this.request<{ id: string }>(
       environment,
       `/1/queries/${datasetSlug}`,
@@ -110,7 +124,6 @@ export class HoneycombAPI {
     datasetSlug: string,
     queryId: string,
   ): Promise<{ id: string }> {
-    const apiKey = this.getApiKey(environment);
     return this.request<{ id: string }>(
       environment,
       `/1/query_results/${datasetSlug}`,
