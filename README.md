@@ -83,7 +83,7 @@ You'll need to run `node` on the location of the build artifact and specify the 
 }
 ```
 
-You can omit the `env` section if you have a more central installation, but it's recommended to have a config file per codebase.
+While you can technically omit the `env` section if you have a more central installation, we recommend fully qualifying the path, even if it's a central installation.
 
 The above configuration has been tested with the following clients:
 
