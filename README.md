@@ -6,6 +6,10 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for interacti
 
 Currently, this is only available for Honeycomb Enterprise customers.
 
+## How it works
+
+Today, this is a single server process **that you must run on your own computer**. It is not authenticated. All information uses STDIO between your client and the server.
+
 ## Installation
 
 ```bash
@@ -17,13 +21,11 @@ The build artifact goes into the `/build` folder.
 
 ## Honeycomb Configuration
 
-Create a configuration file at `.mcp-honeycomb.json` in one of these locations:
+To use this MCP server, you **must** have a `.mcp-honeycomb.json` configuration file. Where it lives depends on how you use the MCP server.
 
-- Current directory (recommended)
-- Home directory (`~/` on macos, for example)
-- Custom location specified by `MCP_HONEYCOMB_CONFIG` environment variable
+### In a codebase or repo
 
-Example configuration:
+Create a configuration file at `.mcp-honeycomb.json` in your repository root.
 
 ```json
 {
@@ -40,7 +42,26 @@ Example configuration:
 }
 ```
 
-**This configuration is required to use the Honeycomb MCP Server.**
+You can technically put it in any location that `MCP_HONEYCOMB_CONFIG` points to, but it's recommended to have a config file per codebase.
+
+### Via a desktop client like Claude Desktop
+
+If you're using Claude Desktop instead of an IDE, it's best to place a configuration file at `.mcp-honeycomb.json` in the Home directory of your computer.
+
+```json
+{
+  "environments": [
+    {
+      "name": "production",
+      "apiKey": "your_prod_api_key"
+    },
+    {
+      "name": "staging",
+      "apiKey": "your_staging_api_key"
+    }
+  ]
+}
+```
 
 ## MCP Configuration
 

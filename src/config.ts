@@ -13,14 +13,20 @@ export const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 
 function findConfigFile(): string {
-  const configPaths = [
-    // Look in standard locations
-    ".mcp-honeycomb.json",
+  // Prioritize current directory configurations
+  const currentDirPaths = [
     path.join(process.cwd(), ".mcp-honeycomb.json"),
+    ".mcp-honeycomb.json", // May be the same as above depending on how the program is run
+  ];
+
+  // Then check central location and environment variable
+  const otherPaths = [
     path.join(process.env.HOME || "~", ".mcp-honeycomb.json"),
-    // Allow overriding with env var
     process.env.MCP_HONEYCOMB_CONFIG,
-  ].filter(Boolean);
+  ];
+
+  // Combine paths, filtering out any undefined values
+  const configPaths = [...currentDirPaths, ...otherPaths].filter(Boolean);
 
   const foundPath = configPaths.find(p => p && fs.existsSync(p));
   if (!foundPath) {
