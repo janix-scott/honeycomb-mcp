@@ -55,14 +55,11 @@ export function registerTools(server: McpServer, api: HoneycombAPI) {
 
   // Register each tool with the server
   for (const tool of tools) {
-    // Convert the schema from a plain object to a zod object
-    const zodSchema = z.object(tool.schema);
-    
     // Register the tool with the server using type assertion to bypass TypeScript's strict type checking
     (server as any).tool(
       tool.name,
       tool.description,
-      zodSchema.shape,
+      tool.schema, 
       async (args: Record<string, any>, extra: any) => {
         try {
           // Validate and ensure required fields are present before passing to handler

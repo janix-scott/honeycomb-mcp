@@ -5,6 +5,7 @@ import { HoneycombAPI } from "./api/client.js";
 import process from "node:process";
 import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
+import { registerPrompts } from "./prompts/index.js";
 
 /**
  * Main function to run the Honeycomb MCP server
@@ -14,24 +15,28 @@ async function main() {
   const config = loadConfig();
   const api = new HoneycombAPI(config);
 
-  // Create server with proper initialization options
+  // Create server with proper initialization options and capabilities
   const server = new McpServer({
     name: "honeycomb",
-    version: "1.0.0"
+    version: "1.0.0",
+    capabilities: {
+      prompts: {} // Register prompts capability
+    }
   });
 
   // Add a small delay to ensure the server is fully initialized before registering tools
-  console.error("Initializing MCP server...");
+  console.log("Initializing MCP server...");
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  // Register resources and tools
-  console.error("Registering resources and tools...");
+  // Register resources, tools, and prompts
+  console.log("Registering resources, tools, and prompts...");
   registerResources(server, api);
   registerTools(server, api);
+  registerPrompts(server);
 
-  // Wait for tool registration to complete
+  // Wait for registration to complete
   await new Promise(resolve => setTimeout(resolve, 500));
-  console.error("All resources and tools registered");
+  console.log("All resources, tools, and prompts registered");
 
   // Create transport and start server
   const transport = new StdioServerTransport();
@@ -45,7 +50,7 @@ async function main() {
     try {
       await server.connect(transport);
       connected = true;
-      console.error("Honeycomb MCP Server running on stdio");
+      console.log("Honeycomb MCP Server running on stdio");
     } catch (error) {
       retries++;
       console.error(`Connection attempt ${retries} failed: ${error instanceof Error ? error.message : String(error)}`);
