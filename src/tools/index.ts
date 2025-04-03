@@ -71,8 +71,6 @@ export function registerTools(server: McpServer, api: HoneycombAPI) {
             throw new Error("Missing required fields: environment, dataset, and column are required");
           } else if (tool.name.includes("run_query") && (!args.environment || !args.dataset)) {
             throw new Error("Missing required fields: environment and dataset are required");
-          } else if (!args.environment) {
-            throw new Error("Missing required field: environment is required");
           }
           
           // Use type assertion to satisfy TypeScript's type checking
