@@ -191,6 +191,8 @@ The resource response includes:
     "triggerId": "xyz789"
   }
   ```
+- `get_trace_link`: Generate a deep link to a specific trace in the Honeycomb UI
+  
 
 ### Example Queries with Claude
 
