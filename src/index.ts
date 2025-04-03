@@ -25,18 +25,18 @@ async function main() {
   });
 
   // Add a small delay to ensure the server is fully initialized before registering tools
-  console.log("Initializing MCP server...");
+  console.error("Initializing MCP server...");
   await new Promise(resolve => setTimeout(resolve, 500));
 
   // Register resources, tools, and prompts
-  console.log("Registering resources, tools, and prompts...");
+  console.error("Registering resources, tools, and prompts...");
   registerResources(server, api);
   registerTools(server, api);
   registerPrompts(server);
 
   // Wait for registration to complete
   await new Promise(resolve => setTimeout(resolve, 500));
-  console.log("All resources, tools, and prompts registered");
+  console.error("All resources, tools, and prompts registered");
 
   // Create transport and start server
   const transport = new StdioServerTransport();
@@ -50,7 +50,7 @@ async function main() {
     try {
       await server.connect(transport);
       connected = true;
-      console.log("Honeycomb MCP Server running on stdio");
+      console.error("Honeycomb MCP Server running on stdio");
     } catch (error) {
       retries++;
       console.error(`Connection attempt ${retries} failed: ${error instanceof Error ? error.message : String(error)}`);
