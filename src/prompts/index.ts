@@ -107,9 +107,9 @@ export function registerPrompts(server: McpServer) {
         });
       }
 
-      console.log("Registered prompts in internal registry");
+      console.error("Registered prompts in internal registry");
     } else {
-      console.log("Prompts capability not available in current SDK version");
+      console.error("Prompts capability not available in current SDK version");
     }
   } catch (error) {
     // Log the error but don't let it crash the server
