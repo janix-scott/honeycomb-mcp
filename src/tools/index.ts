@@ -12,6 +12,7 @@ import { createGetSLOTool } from "./get-slo.js";
 import { createListTriggersTool } from "./list-triggers.js";
 import { createGetTriggerTool } from "./get-trigger.js";
 import { createTraceDeepLinkTool } from "./get-trace-link.js";
+import { createInstrumentationGuidanceTool } from "./instrumentation-guidance.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -50,7 +51,10 @@ export function registerTools(server: McpServer, api: HoneycombAPI) {
     createGetTriggerTool(api),
     
     // Trace tools
-    createTraceDeepLinkTool(api)
+    createTraceDeepLinkTool(api),
+    
+    // Instrumentation tools
+    createInstrumentationGuidanceTool(api)
   ];
 
   // Register each tool with the server
