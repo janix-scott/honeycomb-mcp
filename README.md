@@ -191,8 +191,16 @@ The resource response includes:
     "triggerId": "xyz789"
   }
   ```
+
 - `get_trace_link`: Generate a deep link to a specific trace in the Honeycomb UI
   
+- `get_instrumentation_help`: Provides OpenTelemetry instrumentation guidance
+  ```json
+  {
+    "language": "python",
+    "filepath": "app/services/payment_processor.py"
+  }
+  ```
 
 ### Example Queries with Claude
 
