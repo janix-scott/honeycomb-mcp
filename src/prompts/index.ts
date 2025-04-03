@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { z } from "zod";
 
 // Get the directory name to help resolve paths
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,56 +31,35 @@ const PROMPTS = [
 ];
 
 /**
- * Prompt handler function type
+ * Handler for the instrumentation-guidance prompt
  */
-type PromptHandler = {
-  name: string;
-  handler: (args?: Record<string, any>) => Promise<{
-    messages: Array<{
-      role: string;
-      content: {
-        type: string;
-        text: string;
-      };
-    }>;
-  }>;
-};
-
-/**
- * Collection of prompt handlers
- */
-const promptHandlers: PromptHandler[] = [
-  {
-    name: "instrumentation-guidance",
-    handler: async (args) => {
-      try {
-        const guidance = fs.readFileSync(
-          path.join(docsPath, "generic-instrumentation-guidance.md"),
-          'utf8'
-        );
-
-        const language = args?.language || "your code";
-        const filepath = args?.filepath
-          ? ` for ${args.filepath}`
-          : "";
-
-        return {
-          messages: [
-            {
-              role: "user",
-              content: {
-                type: "text",
-                text: `I need help instrumenting ${language}${filepath} with OpenTelemetry for Honeycomb. Please provide specific recommendations following these guidelines:\n\n${guidance}`
-              }
-            }
-          ]
-        };
-      } catch (error) {
-        throw new Error(`Failed to read instrumentation guidance: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
+async function handleInstrumentationGuidance(args?: Record<string, any>) {
+  try {
+    const guidance = fs.readFileSync(
+      path.join(docsPath, "generic-instrumentation-guidance.md"),
+      'utf8'
+    );
+    
+    const language = args?.language || "your code";
+    const filepath = args?.filepath
+      ? ` for ${args.filepath}`
+      : "";
+      
+    return {
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `I need help instrumenting ${language}${filepath} with OpenTelemetry for Honeycomb. Please provide specific recommendations following these guidelines:\n\n${guidance}`
+          }
+        }
+      ]
+    };
+  } catch (error) {
+    throw new Error(`Failed to read instrumentation guidance: ${error instanceof Error ? error.message : String(error)}`);
   }
-];
+}
 
 /**
  * Register prompt capabilities with the MCP server
@@ -88,31 +68,86 @@ const promptHandlers: PromptHandler[] = [
  */
 export function registerPrompts(server: McpServer) {
   try {
-    // Access the internal structure to register prompts
+    // Cast server to any to access internal structure
     const serverAny = server as any;
-
-    // Add prompts to the server's internal registry
-    if (serverAny._registeredPrompts && Array.isArray(serverAny._registeredPrompts)) {
-      // Add each prompt definition to the registry
-      PROMPTS.forEach(prompt => {
-        if (!serverAny._registeredPrompts.some((p: any) => p.name === prompt.name)) {
-          serverAny._registeredPrompts.push(prompt);
-        }
-      });
-
-      // Add handler mappings if possible
-      if (serverAny._promptHandlers && typeof serverAny._promptHandlers === 'object') {
-        promptHandlers.forEach(handler => {
-          serverAny._promptHandlers[handler.name] = handler.handler;
-        });
+    
+    let registered = false;
+    
+    // Approach 1: Use server.prompt if available (direct SDK method)
+    if (typeof serverAny.prompt === 'function') {
+      try {
+        serverAny.prompt(
+          "instrumentation-guidance",
+          { 
+            language: z.string().optional(),
+            filepath: z.string().optional()
+          },
+          handleInstrumentationGuidance
+        );
+        console.error("Registered prompts using server.prompt API");
+        registered = true;
+      } catch (error) {
+        console.error("Error using server.prompt API:", error instanceof Error ? error.message : String(error));
       }
-
-      console.error("Registered prompts in internal registry");
-    } else {
-      console.error("Prompts capability not available in current SDK version");
+    }
+    
+    // Approach 2: Try server.server.setRequestHandler (works in tests)
+    if (!registered && serverAny.server && typeof serverAny.server.setRequestHandler === 'function') {
+      try {
+        // Register prompts/list handler
+        serverAny.server.setRequestHandler(
+          { method: 'prompts/list' },
+          async () => ({ prompts: PROMPTS })
+        );
+        
+        // Register prompts/get handler
+        serverAny.server.setRequestHandler(
+          { method: 'prompts/get' },
+          async (request: { params: { name: string; arguments?: Record<string, any> } }) => {
+            const { name, arguments: promptArgs } = request.params;
+            
+            if (name !== 'instrumentation-guidance') {
+              throw new Error(`Prompt not found: ${name}`);
+            }
+            
+            return handleInstrumentationGuidance(promptArgs);
+          }
+        );
+        
+        console.error("Registered prompts using server.server.setRequestHandler API");
+        registered = true;
+      } catch (error) {
+        console.error("Error using server.server.setRequestHandler API:", error instanceof Error ? error.message : String(error));
+      }
+    }
+    
+    // Approach 3: Add to internal registries directly if available
+    if (!registered && serverAny._registeredPrompts && Array.isArray(serverAny._registeredPrompts)) {
+      try {
+        // Add each prompt definition to the registry
+        PROMPTS.forEach(prompt => {
+          if (!serverAny._registeredPrompts.some((p: any) => p.name === prompt.name)) {
+            serverAny._registeredPrompts.push(prompt);
+          }
+        });
+        
+        // Add handler mappings if possible
+        if (serverAny._promptHandlers && typeof serverAny._promptHandlers === 'object') {
+          serverAny._promptHandlers["instrumentation-guidance"] = handleInstrumentationGuidance;
+        }
+        
+        console.error("Registered prompts by adding to internal registries");
+        registered = true;
+      } catch (error) {
+        console.error("Error adding to internal registries:", error instanceof Error ? error.message : String(error));
+      }
+    }
+    
+    if (!registered) {
+      console.error("Could not register prompts: no compatible registration method found");
     }
   } catch (error) {
     // Log the error but don't let it crash the server
-    console.log("Error registering prompts:", error instanceof Error ? error.message : String(error));
+    console.error("Error in registerPrompts:", error instanceof Error ? error.message : String(error));
   }
 }
