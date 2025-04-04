@@ -12,6 +12,7 @@ import { createGetSLOTool } from "./get-slo.js";
 import { createListTriggersTool } from "./list-triggers.js";
 import { createGetTriggerTool } from "./get-trigger.js";
 import { createTraceDeepLinkTool } from "./get-trace-link.js";
+import { createInstrumentationGuidanceTool } from "./instrumentation-guidance.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -50,19 +51,19 @@ export function registerTools(server: McpServer, api: HoneycombAPI) {
     createGetTriggerTool(api),
     
     // Trace tools
-    createTraceDeepLinkTool(api)
+    createTraceDeepLinkTool(api),
+    
+    // Instrumentation tools
+    createInstrumentationGuidanceTool(api)
   ];
 
   // Register each tool with the server
   for (const tool of tools) {
-    // Convert the schema from a plain object to a zod object
-    const zodSchema = z.object(tool.schema);
-    
     // Register the tool with the server using type assertion to bypass TypeScript's strict type checking
     (server as any).tool(
       tool.name,
       tool.description,
-      zodSchema.shape,
+      tool.schema, 
       async (args: Record<string, any>, extra: any) => {
         try {
           // Validate and ensure required fields are present before passing to handler
@@ -70,8 +71,6 @@ export function registerTools(server: McpServer, api: HoneycombAPI) {
             throw new Error("Missing required fields: environment, dataset, and column are required");
           } else if (tool.name.includes("run_query") && (!args.environment || !args.dataset)) {
             throw new Error("Missing required fields: environment and dataset are required");
-          } else if (!args.environment) {
-            throw new Error("Missing required field: environment is required");
           }
           
           // Use type assertion to satisfy TypeScript's type checking
