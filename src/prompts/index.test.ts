@@ -1,19 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
 import { registerPrompts } from './index.js';
-
-// Mock fs module
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-}));
-
-// Mock path module
-vi.mock('path', () => ({
-  join: vi.fn(),
-  dirname: vi.fn(),
-  resolve: vi.fn(),
-}));
 
 describe('prompts module', () => {
   // Mock server
@@ -26,8 +12,6 @@ describe('prompts module', () => {
   // Reset mocks before each test
   beforeEach(() => {
     vi.resetAllMocks();
-    // Mock path.join to return a predictable path
-    vi.mocked(path.join).mockReturnValue('/mocked/path/to/guidance.md');
   });
 
   describe('registerPrompts', () => {
@@ -84,9 +68,6 @@ describe('prompts module', () => {
 
   describe('prompts/get handler', () => {
     it('should return instrumentation guidance prompt', async () => {
-      // Mock fs.readFileSync to return example guidance
-      vi.mocked(fs.readFileSync).mockReturnValue('# Mock Instrumentation Guidance');
-
       // Register prompts
       registerPrompts(mockServer as any);
 
@@ -118,13 +99,10 @@ describe('prompts module', () => {
       // Verify text includes the language and filepath
       expect(result.messages[0].content.text).toContain('JavaScript');
       expect(result.messages[0].content.text).toContain('/app/index.js');
-      expect(result.messages[0].content.text).toContain('Mock Instrumentation Guidance');
+      expect(result.messages[0].content.text).toContain('# OpenTelemetry Code Analysis & Instrumentation');
     });
 
     it('should use default values when arguments are not provided', async () => {
-      // Mock fs.readFileSync to return example guidance
-      vi.mocked(fs.readFileSync).mockReturnValue('# Mock Instrumentation Guidance');
-
       // Register prompts
       registerPrompts(mockServer as any);
 
@@ -163,31 +141,6 @@ describe('prompts module', () => {
 
       // Verify the handler throws an error
       await expect(promise).rejects.toThrow('Prompt not found: unknown-prompt');
-    });
-
-    it('should handle filesystem errors', async () => {
-      // Mock fs.readFileSync to throw an error
-      vi.mocked(fs.readFileSync).mockImplementation(() => {
-        throw new Error('File not found');
-      });
-
-      // Register prompts
-      registerPrompts(mockServer as any);
-
-      // Get the registered handler for prompts/get
-      const getHandler = vi.mocked(mockServer.server.setRequestHandler).mock.calls.find(
-        call => call[0].method === 'prompts/get'
-      )?.[1];
-
-      // Call the handler
-      const promise = getHandler!({
-        params: {
-          name: 'instrumentation-guidance'
-        }
-      } as any);
-
-      // Verify the handler throws an error
-      await expect(promise).rejects.toThrow('Failed to read instrumentation guidance');
     });
   });
 });
