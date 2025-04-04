@@ -47,10 +47,10 @@ function getDocsPath(): string {
     return cwdDocsPath;
   }
   
-  // Third try: hardcode the path based on the repository location
-  const hardcodedPath = "/Users/pcarter/repos/honeycomb-mcp/docs";
-  if (safePathExists(hardcodedPath)) {
-    return hardcodedPath;
+  // Third try: use environment variable for the path
+  const envDocsPath = process.env.DOCS_PATH;
+  if (envDocsPath && safePathExists(envDocsPath)) {
+    return envDocsPath;
   }
   
   // Default fallback
