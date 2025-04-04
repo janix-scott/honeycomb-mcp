@@ -152,8 +152,12 @@ class AnthropicProvider implements LLMProvider {
       
       // Reset context after call
       this.isToolCall = false;
-      
-      return response.content[0].text;
+
+      if (response.content[0].type === 'text') {
+        return response.content[0].text;
+       } else {
+        return `Got ${response.content[0].type} response, expected text`;
+      }
     } catch (error) {
       console.error('Anthropic API error:', error);
       return `SCORE: 0\nPASSED: false\nREASONING: Error calling Anthropic API: ${error.message}`;
