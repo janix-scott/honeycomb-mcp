@@ -3,7 +3,7 @@ import { QueryToolSchema } from "../types/schema.js";
 import { QueryError } from "../utils/errors.js";
 
 function validateTimeParameters(params: z.infer<typeof QueryToolSchema>): void {
-  // THE RULES:
+  // DA RULEZ:
   // 
   // A range of time need not exist (it will default to 2hrs).
   //
