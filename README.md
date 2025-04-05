@@ -45,15 +45,17 @@ HONEYCOMB_ENV_STAGING_API_KEY=your_staging_api_key
 HONEYCOMB_ENV_DEV_API_KEY=your_dev_api_key
 ```
 
-Each environment will be accessible using the name in the environment variable (e.g., "prod", "staging", "dev").
+Each environment will be accessible using the name in the environment variable
+(e.g., "prod", "staging", "dev"). You can also refer to the name of the
+Honeycomb Environment that each key corresponds to in the UI.
 
 ### Optional Configuration
 
-You can also set an optional API endpoint if you're using a custom Honeycomb instance:
+You can also set an optional API endpoint (e.g., for Honeycomb EU customers):
 
 ```bash
 # Optional custom API endpoint (defaults to https://api.honeycomb.io)
-HONEYCOMB_API_ENDPOINT=https://your-custom-honeycomb-endpoint.com
+HONEYCOMB_API_ENDPOINT=https://api.eu1.honeycomb.io/
 ```
 
 ## MCP Configuration
@@ -103,6 +105,7 @@ The above configuration has been tested with the following clients:
 - [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/tutorials#set-up-model-context-protocol-mcp)
 - [Cursor](https://docs.cursor.com/context/model-context-protocol)
 - [Windsurf](https://docs.codeium.com/windsurf/mcp)
+- [Goose](https://block.github.io/goose/docs/getting-started/using-extensions#mcp-servers)
 
 It will likely work with other clients.
 
