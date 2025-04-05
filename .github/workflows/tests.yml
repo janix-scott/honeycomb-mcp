@@ -103,8 +103,33 @@ jobs:
 
     - name: Run evaluations
       id: run_evals
-      continue-on-error: true
-      run: pnpm run eval
+      run: |
+        echo "Running evaluations..."
+        if ! pnpm run eval; then
+          echo "::error::Evaluation failed during execution"
+          echo "EVAL_OUTCOME=failed" >> $GITHUB_ENV
+          # Create a failure report but don't exit yet - we want to collect all artifacts
+          mkdir -p eval/reports
+          echo '<!DOCTYPE html>' > eval/reports/eval-failed.html
+          echo '<html><head><title>Evaluation Failed</title></head>' >> eval/reports/eval-failed.html
+          echo '<body><h1>Evaluation Failed</h1>' >> eval/reports/eval-failed.html
+          echo '<p>The evaluation process encountered an error. Check the logs for details.</p>' >> eval/reports/eval-failed.html
+          echo '<h2>Configuration Information</h2>' >> eval/reports/eval-failed.html
+          echo '<pre>' >> eval/reports/eval-failed.html
+          if [ -n "$HONEYCOMB_API_KEY" ]; then
+            echo "Honeycomb API key is set (length: ${#HONEYCOMB_API_KEY})" >> eval/reports/eval-failed.html
+          else
+            echo "Honeycomb API key is not set!" >> eval/reports/eval-failed.html
+            echo "Make sure HONEYCOMB_API_KEY is set in GitHub secrets and passed to the workflow" >> eval/reports/eval-failed.html
+          fi
+          echo '</pre>' >> eval/reports/eval-failed.html
+          echo '</body></html>' >> eval/reports/eval-failed.html
+          # Print environment variables (excluding secrets) for debugging
+          echo "Environment variables for debugging:"
+          env | grep -v -E "HONEYCOMB_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY" | sort
+        else
+          echo "EVAL_OUTCOME=success" >> $GITHUB_ENV
+        fi
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -116,34 +141,6 @@ jobs:
         EVAL_JUDGE_PROVIDER: "anthropic"
         EVAL_JUDGE_MODEL: "claude-3-5-haiku-latest"
         MCP_SERVER_COMMAND: "node build/index.mjs"
-        
-    # Mark step as failed if evaluations didn't run successfully
-    - name: Check evaluation result
-      if: steps.run_evals.outcome != 'success'
-      run: |
-        echo "Evaluations failed to run properly!"
-        mkdir -p eval/reports
-        
-        echo '<!DOCTYPE html>' > eval/reports/eval-failed.html
-        echo '<html><head><title>Evaluation Failed</title></head>' >> eval/reports/eval-failed.html
-        echo '<body><h1>Evaluation Failed</h1>' >> eval/reports/eval-failed.html
-        echo '<p>The evaluation process encountered an error. Check the logs for details.</p>' >> eval/reports/eval-failed.html
-        echo '<h2>Configuration Information</h2>' >> eval/reports/eval-failed.html
-        echo '<pre>' >> eval/reports/eval-failed.html
-        if [ -n "$HONEYCOMB_API_KEY" ]; then
-          echo "Honeycomb API key is set (length: ${#HONEYCOMB_API_KEY})" >> eval/reports/eval-failed.html
-        else
-          echo "Honeycomb API key is not set!" >> eval/reports/eval-failed.html
-          echo "Make sure HONEYCOMB_API_KEY is set in GitHub secrets and passed to the workflow" >> eval/reports/eval-failed.html
-        fi
-        echo '</pre>' >> eval/reports/eval-failed.html
-        echo '</body></html>' >> eval/reports/eval-failed.html
-        
-        # Print environment variables (excluding secrets) for debugging
-        echo "Environment variables for debugging:"
-        env | grep -v -E "HONEYCOMB_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY" | sort
-        
-        exit 1
     
     - name: Ensure reports directory exists
       run: mkdir -p eval/reports
@@ -168,19 +165,34 @@ jobs:
     
     - name: Post report summary
       run: |
-        echo "## Evaluation Results" > $GITHUB_STEP_SUMMARY
-        echo "Ran evaluations with OpenAI and Anthropic models." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Summary" >> $GITHUB_STEP_SUMMARY
-        echo "Latest report: $(basename ${{ steps.find-report.outputs.latest_report }})" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "The full report is available as a workflow artifact." >> $GITHUB_STEP_SUMMARY
+        if [ "$EVAL_OUTCOME" == "failed" ]; then
+          echo "## ❌ Evaluation Failed" > $GITHUB_STEP_SUMMARY
+          echo "The evaluation process encountered errors. See logs for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Error report: $(basename ${{ steps.find-report.outputs.latest_report }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The error report is available as a workflow artifact." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "## ✅ Evaluation Results" > $GITHUB_STEP_SUMMARY
+          echo "Ran evaluations with OpenAI and Anthropic models." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Latest report: $(basename ${{ steps.find-report.outputs.latest_report }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The full report is available as a workflow artifact." >> $GITHUB_STEP_SUMMARY
+        fi
         
         # Add PR comment if we're on a PR
         if [ "${{ github.event_name }}" == "pull_request" ]; then
           PR_COMMENT="## Honeycomb MCP Evaluation Results\n\n"
-          PR_COMMENT+="✅ Evaluations completed successfully\n\n"
-          PR_COMMENT+="Download the full report from the workflow artifacts"
+          
+          if [ "$EVAL_OUTCOME" == "failed" ]; then
+            PR_COMMENT+="❌ Evaluation process failed\n\n"
+            PR_COMMENT+="The evaluation process encountered errors. See workflow logs for details."
+          else
+            PR_COMMENT+="✅ Evaluations completed successfully\n\n"
+            PR_COMMENT+="Download the full report from the workflow artifacts"
+          fi
           
           echo -e "$PR_COMMENT" > pr_comment.txt
           
@@ -204,3 +216,10 @@ jobs:
         name: evaluation-reports
         path: eval/reports/
         retention-days: 30
+        
+    # Final step to fail the job if evaluations failed
+    - name: Check final evaluation status
+      if: env.EVAL_OUTCOME == 'failed'
+      run: |
+        echo "::error::Evaluation failed - see artifacts for error report"
+        exit 1
