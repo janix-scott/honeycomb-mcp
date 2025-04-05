@@ -215,8 +215,21 @@ jobs:
             
             # Add models tested section
             PR_COMMENT+="### Models Tested\n\n"
-            PR_COMMENT+="- OpenAI: $(echo $EVAL_MODELS | jq -r '.openai // [] | if type == \"array\" then join(\", \") else . end')\n"
-            PR_COMMENT+="- Anthropic: $(echo $EVAL_MODELS | jq -r '.anthropic // [] | if type == \"array\" then join(\", \") else . end')\n\n"
+            
+            # Parse models in a more shell-compatible way
+            if [ -n "$EVAL_MODELS" ]; then
+              # Extract OpenAI models
+              OPENAI_MODELS=$(echo "$EVAL_MODELS" | jq -r '.openai | if . == null then "N/A" elif type == "array" then join(", ") else . end' 2>/dev/null || echo "N/A")
+              
+              # Extract Anthropic models
+              ANTHROPIC_MODELS=$(echo "$EVAL_MODELS" | jq -r '.anthropic | if . == null then "N/A" elif type == "array" then join(", ") else . end' 2>/dev/null || echo "N/A")
+              
+              # Add to the comment
+              PR_COMMENT+="- OpenAI: ${OPENAI_MODELS}\n"
+              PR_COMMENT+="- Anthropic: ${ANTHROPIC_MODELS}\n\n"
+            else
+              PR_COMMENT+="- Model information not available\n\n"
+            fi
             
             PR_COMMENT+="📊 [View full report in workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           fi
