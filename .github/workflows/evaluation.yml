@@ -52,8 +52,8 @@ jobs:
               archive_format: 'zip'
             });
             
-            const fs = require('fs');
-            fs.writeFileSync('new-reports.zip', Buffer.from(download.data));
+            const { writeFileSync } = await import('fs');
+            writeFileSync('new-reports.zip', Buffer.from(download.data));
       
       # Download current live site to preserve history
       - name: Download existing reports from GitHub Pages
@@ -111,10 +111,10 @@ jobs:
           
           # Create a Node.js script to regenerate the index.html
           cat > update-index.js << 'EOF'
-          const fs = require('fs');
+          import { readdirSync, writeFileSync } from 'fs';
           
           // Get all report files
-          const files = fs.readdirSync('.');
+          const files = readdirSync('.');
           const reportFiles = files.filter(file => file.startsWith('report-') && file.endsWith('.html'));
           
           // Sort by date (newest first)
@@ -163,7 +163,7 @@ jobs:
           </body>
           </html>`;
           
-          fs.writeFileSync('index.html', html);
+          writeFileSync('index.html', html);
           console.log('Generated index.html with', reportFiles.length, 'reports');
           EOF
           
