@@ -162,14 +162,7 @@ The resource response includes:
   }
   ```
 
-- `analyze_column`: Get statistical analysis of a column
-  ```json
-  {
-    "environment": "production",
-    "dataset": "api-requests",
-    "column": "duration_ms"
-  }
-  ```
+- `analyze_columns`: Analyzes specific columns in a dataset by running statistical queries and returning computed metrics.
 
 - `list_slos`: List all SLOs for a dataset
   ```json
