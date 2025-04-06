@@ -200,12 +200,17 @@ jobs:
               TOTAL=$(jq -r '.totalTests' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               
               # Create a more informative completion message
-              if [ "$SUCCESS_RATE" != "N/A" ] && [ "$SUCCESS_RATE" -ge 75 ]; then
-                PR_COMMENT+="✅ Evaluations completed successfully: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
-              elif [ "$SUCCESS_RATE" != "N/A" ] && [ "$SUCCESS_RATE" -ge 50 ]; then
-                PR_COMMENT+="⚠️ Evaluations completed with mixed results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
-              elif [ "$SUCCESS_RATE" != "N/A" ]; then
-                PR_COMMENT+="❌ Evaluations completed with poor results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
+              if [ "$SUCCESS_RATE" != "N/A" ]; then
+                # Convert to integer for comparison by removing decimal part
+                SUCCESS_RATE_INT=$(echo "$SUCCESS_RATE" | cut -d. -f1)
+                
+                if [ "$SUCCESS_RATE_INT" -ge 75 ]; then
+                  PR_COMMENT+="✅ Evaluations completed successfully: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
+                elif [ "$SUCCESS_RATE_INT" -ge 50 ]; then
+                  PR_COMMENT+="⚠️ Evaluations completed with mixed results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
+                else
+                  PR_COMMENT+="❌ Evaluations completed with poor results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
+                fi
               else
                 PR_COMMENT+="✅ Evaluations completed successfully\n\n"
               fi
@@ -319,28 +324,31 @@ jobs:
               PR_COMMENT+="Model information not available\n"
             fi
             
-            # Add test failures section if there are any failures
-            if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ] && [ "$PASSED" != "$TOTAL" ]; then
-              FAILURES=$(jq -r '.results | map(select(.validation.passed == false)) | map({id: .id, provider: .provider, model: .model, score: .validation.score})' "$LATEST_SUMMARY" 2>/dev/null)
-              
-              if [ -n "$FAILURES" ] && [ "$FAILURES" != "[]" ] && [ "$FAILURES" != "null" ]; then
-                PR_COMMENT+="### Failed Tests\n\n"
-                PR_COMMENT+="| Test ID | Provider | Model | Score |\n"
-                PR_COMMENT+="|--------|----------|-------|-------|\n"
+            # Add test failures section if there are any failures (convert to integers for safe comparison)
+            if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ]; then
+              # Only proceed if both numbers are valid and different
+              if [ "$PASSED" != "N/A" ] && [ "$TOTAL" != "N/A" ] && [ "$PASSED" != "$TOTAL" ]; then
+                FAILURES=$(jq -r '.results | map(select(.validation.passed == false)) | map({id: .id, provider: .provider, model: .model, score: .validation.score})' "$LATEST_SUMMARY" 2>/dev/null)
                 
-                echo "$FAILURES" | jq -c '.[]' | while read -r test; do
-                  ID=$(echo "$test" | jq -r '.id')
-                  PROVIDER=$(echo "$test" | jq -r '.provider')
-                  MODEL=$(echo "$test" | jq -r '.model')
-                  SCORE=$(echo "$test" | jq -r 'if has("score") and .score != null then (.score * 100 | round) | tostring + "%" else "N/A" end')
+                if [ -n "$FAILURES" ] && [ "$FAILURES" != "[]" ] && [ "$FAILURES" != "null" ]; then
+                  PR_COMMENT+="### Failed Tests\n\n"
+                  PR_COMMENT+="| Test ID | Provider | Model | Score |\n"
+                  PR_COMMENT+="|--------|----------|-------|-------|\n"
                   
-                  # Format provider name
-                  PROVIDER_FORMATTED=$(echo "$PROVIDER" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+                  echo "$FAILURES" | jq -c '.[]' | while read -r test; do
+                    ID=$(echo "$test" | jq -r '.id')
+                    PROVIDER=$(echo "$test" | jq -r '.provider')
+                    MODEL=$(echo "$test" | jq -r '.model')
+                    SCORE=$(echo "$test" | jq -r 'if has("score") and .score != null then (.score * 100 | round) | tostring + "%" else "N/A" end')
+                    
+                    # Format provider name
+                    PROVIDER_FORMATTED=$(echo "$PROVIDER" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+                    
+                    PR_COMMENT+="| $ID | $PROVIDER_FORMATTED | $MODEL | $SCORE |\n"
+                  done
                   
-                  PR_COMMENT+="| $ID | $PROVIDER_FORMATTED | $MODEL | $SCORE |\n"
-                done
-                
-                PR_COMMENT+="\n"
+                  PR_COMMENT+="\n"
+                fi
               fi
             fi
             
