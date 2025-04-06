@@ -190,11 +190,28 @@ jobs:
             PR_COMMENT+="❌ Evaluation process failed\n\n"
             PR_COMMENT+="The evaluation process encountered errors. See workflow logs for details."
           else
-            PR_COMMENT+="✅ Evaluations completed successfully\n\n"
-            
-            # Extract key metrics directly from summary.json instead of HTML
             # Find the latest summary file
             LATEST_SUMMARY=$(find eval/results -name "summary-*.json" -type f | sort -r | head -1)
+            
+            # Extract summary information
+            if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ]; then
+              SUCCESS_RATE=$(jq -r '.successRate * 100 | round(1)' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              PASSED=$(jq -r '.passed' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              TOTAL=$(jq -r '.totalTests' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              
+              # Create a more informative completion message
+              if [ "$SUCCESS_RATE" != "N/A" ] && [ "$SUCCESS_RATE" -ge 75 ]; then
+                PR_COMMENT+="✅ Evaluations completed successfully: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
+              elif [ "$SUCCESS_RATE" != "N/A" ] && [ "$SUCCESS_RATE" -ge 50 ]; then
+                PR_COMMENT+="⚠️ Evaluations completed with mixed results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
+              elif [ "$SUCCESS_RATE" != "N/A" ]; then
+                PR_COMMENT+="❌ Evaluations completed with poor results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)\n\n"
+              else
+                PR_COMMENT+="✅ Evaluations completed successfully\n\n"
+              fi
+            else
+              PR_COMMENT+="✅ Evaluations completed successfully\n\n"
+            fi
             
             if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ]; then
               echo "Found summary file: $LATEST_SUMMARY"
@@ -205,13 +222,34 @@ jobs:
               TOTAL=$(jq -r '.totalTests' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               AVG_LATENCY=$(jq -r '.averageLatency | round' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               
+              # Get additional metrics if available
+              AVG_TOOL_CALLS=$(jq -r 'if has("averageToolCalls") then .averageToolCalls | round(1) else "N/A" end' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              AVG_TOOL_TOKENS=$(jq -r 'if has("averageToolTokens") then .averageToolTokens | round else "N/A" end' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              
+              # Get judge details if available
+              JUDGE_PROVIDER=$(jq -r '.metadata.judge.provider // "N/A"' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              JUDGE_MODEL=$(jq -r '.metadata.judge.model // "N/A"' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              
               # Add summary metrics table
               PR_COMMENT+="### Evaluation Summary\n\n"
               PR_COMMENT+="| Metric | Value |\n"
               PR_COMMENT+="|--------|-------|\n"
               PR_COMMENT+="| Success Rate | $SUCCESS_RATE% |\n"
               PR_COMMENT+="| Tests Passed | $PASSED / $TOTAL |\n"
-              PR_COMMENT+="| Avg Latency | ${AVG_LATENCY}ms |\n\n"
+              PR_COMMENT+="| Avg Latency | ${AVG_LATENCY}ms |\n"
+              if [ "$AVG_TOOL_CALLS" != "N/A" ]; then
+                PR_COMMENT+="| Avg Tool Calls | $AVG_TOOL_CALLS |\n"
+              fi
+              if [ "$AVG_TOOL_TOKENS" != "N/A" ]; then
+                PR_COMMENT+="| Avg Tool Tokens | $AVG_TOOL_TOKENS |\n"
+              fi
+              
+              # Add judge information if available
+              if [ "$JUDGE_PROVIDER" != "N/A" ] && [ "$JUDGE_MODEL" != "N/A" ]; then
+                PR_COMMENT+="\nValidation performed by: $JUDGE_PROVIDER / $JUDGE_MODEL\n"
+              fi
+              
+              PR_COMMENT+="\n"
             else
               echo "No summary.json file found in eval/results"
               
@@ -224,34 +262,89 @@ jobs:
               PR_COMMENT+="| Avg Latency | N/A |\n\n"
             fi
             
-            # Add models tested section - extract from summary.json results
+            # Add models tested section - extract from summary.json results with test counts
             PR_COMMENT+="### Models Tested\n\n"
             
             if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ]; then
-              # Get unique models grouped by provider from summary.json
-              OPENAI_MODELS=$(jq -r '.results[] | select(.provider == "openai") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u | tr '\n' ', ' | sed 's/,$//' | sed 's/,/, /g' || echo "None")
-              ANTHROPIC_MODELS=$(jq -r '.results[] | select(.provider == "anthropic") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u | tr '\n' ', ' | sed 's/,$//' | sed 's/,/, /g' || echo "None")
+              # Create a table for the models used with test counts and success rates
+              PR_COMMENT+="| Provider | Model | Tests | Success Rate |\n"
+              PR_COMMENT+="|----------|-------|-------|-------------|\n"
               
-              # Add to the comment if models were found
-              if [ -n "$OPENAI_MODELS" ] && [ "$OPENAI_MODELS" != "None" ]; then
-                PR_COMMENT+="- OpenAI: ${OPENAI_MODELS}\n"
-              fi
+              # Use jq to extract and count models and their results
+              MODEL_SUMMARY=$(jq -r '
+              .results | 
+              group_by(.provider + "-" + .model) | 
+              map({
+                provider: .[0].provider, 
+                model: .[0].model, 
+                count: length, 
+                passed: map(select(.validation.passed == true)) | length,
+                success_rate: (map(select(.validation.passed == true)) | length) / length * 100
+              })' "$LATEST_SUMMARY" 2>/dev/null)
               
-              if [ -n "$ANTHROPIC_MODELS" ] && [ "$ANTHROPIC_MODELS" != "None" ]; then
-                PR_COMMENT+="- Anthropic: ${ANTHROPIC_MODELS}\n"
-              fi
-              
-              # If no models were found for either provider
-              if [ "$OPENAI_MODELS" == "None" ] && [ "$ANTHROPIC_MODELS" == "None" ]; then
-                PR_COMMENT+="- Model information could not be extracted from results\n"
+              # Check if we successfully extracted model data
+              if [ -n "$MODEL_SUMMARY" ] && [ "$MODEL_SUMMARY" != "null" ]; then
+                # Loop through each model entry and add to table
+                echo "$MODEL_SUMMARY" | jq -c '.[]' | while read -r model_entry; do
+                  PROVIDER=$(echo "$model_entry" | jq -r '.provider')
+                  MODEL=$(echo "$model_entry" | jq -r '.model')
+                  COUNT=$(echo "$model_entry" | jq -r '.count')
+                  SUCCESS=$(echo "$model_entry" | jq -r '.success_rate | round(1)')
+                  
+                  # Convert provider to title case
+                  PROVIDER_FORMATTED=$(echo "$PROVIDER" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+                  
+                  PR_COMMENT+="| $PROVIDER_FORMATTED | $MODEL | $COUNT | ${SUCCESS}% |\n"
+                done
+              else
+                # Fallback to old method if jq query didn't work
+                OPENAI_MODELS=$(jq -r '.results[] | select(.provider == "openai") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u | tr '\n' ', ' | sed 's/,$//' | sed 's/,/, /g' || echo "None")
+                ANTHROPIC_MODELS=$(jq -r '.results[] | select(.provider == "anthropic") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u | tr '\n' ', ' | sed 's/,$//' | sed 's/,/, /g' || echo "None")
+                
+                # Add to the table if models were found
+                if [ -n "$OPENAI_MODELS" ] && [ "$OPENAI_MODELS" != "None" ]; then
+                  PR_COMMENT+="| OpenAI | ${OPENAI_MODELS} | - | - |\n"
+                fi
+                
+                if [ -n "$ANTHROPIC_MODELS" ] && [ "$ANTHROPIC_MODELS" != "None" ]; then
+                  PR_COMMENT+="| Anthropic | ${ANTHROPIC_MODELS} | - | - |\n"
+                fi
+                
+                # If no models were found for either provider
+                if [ "$OPENAI_MODELS" == "None" ] && [ "$ANTHROPIC_MODELS" == "None" ]; then
+                  PR_COMMENT+="Model information could not be extracted from results\n"
+                fi
               fi
             else
-              PR_COMMENT+="- Model information not available\n"
+              PR_COMMENT+="Model information not available\n"
             fi
             
-            PR_COMMENT+="\n"
+            # Add test failures section if there are any failures
+            if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ] && [ "$PASSED" != "$TOTAL" ]; then
+              FAILURES=$(jq -r '.results | map(select(.validation.passed == false)) | map({id: .id, provider: .provider, model: .model, score: .validation.score})' "$LATEST_SUMMARY" 2>/dev/null)
+              
+              if [ -n "$FAILURES" ] && [ "$FAILURES" != "[]" ] && [ "$FAILURES" != "null" ]; then
+                PR_COMMENT+="### Failed Tests\n\n"
+                PR_COMMENT+="| Test ID | Provider | Model | Score |\n"
+                PR_COMMENT+="|--------|----------|-------|-------|\n"
+                
+                echo "$FAILURES" | jq -c '.[]' | while read -r test; do
+                  ID=$(echo "$test" | jq -r '.id')
+                  PROVIDER=$(echo "$test" | jq -r '.provider')
+                  MODEL=$(echo "$test" | jq -r '.model')
+                  SCORE=$(echo "$test" | jq -r 'if has("score") and .score != null then (.score * 100 | round) | tostring + "%" else "N/A" end')
+                  
+                  # Format provider name
+                  PROVIDER_FORMATTED=$(echo "$PROVIDER" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
+                  
+                  PR_COMMENT+="| $ID | $PROVIDER_FORMATTED | $MODEL | $SCORE |\n"
+                done
+                
+                PR_COMMENT+="\n"
+              fi
+            fi
             
-            PR_COMMENT+="📊 [View full report in workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            PR_COMMENT+="\n📊 [View full report in workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           fi
           
           echo -e "$PR_COMMENT" > pr_comment.txt
