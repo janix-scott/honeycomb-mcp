@@ -10,9 +10,11 @@ import {
 } from "../types/analysis.js";
 import { QueryResultValue } from "../types/query.js";
 
-const description = `Analyzes a specific column in a dataset by running statistical queries and returning computed metrics. This tool allows users to get statistical information about a specific column, including value distribution, top values, and numeric statistics (for numeric columns).
- Supports analyzing up to 10 columns at once by specifying an array of column names in the 'columns' parameter.
- When multiple columns are specified, they will be analyzed together as a group, showing the distribution of their combined values.
+const description = `Analyzes specific columns in a dataset by running statistical queries and returning computed metrics.
+This tool allows users to get statistical information about a specific column, including value distribution, top values, and numeric statistics (for numeric columns).
+Supports analyzing up to 10 columns at once by specifying an array of column names in the 'columns' parameter.
+When multiple columns are specified, they will be analyzed together as a group, showing the distribution of their combined values.
+Use this tool before running queries to get a better understanding of the data in your dataset.
 `
 
 /**
