@@ -184,18 +184,93 @@ jobs:
         
         # Add PR comment if we're on a PR
         if [ "${{ github.event_name }}" == "pull_request" ]; then
-          PR_COMMENT="## Honeycomb MCP Evaluation Results\n\n"
+          # Start with basic PR comment header
+          echo "## Honeycomb MCP Evaluation Results" > pr_comment.txt
+          echo "" >> pr_comment.txt
           
           if [ "$EVAL_OUTCOME" == "failed" ]; then
-            PR_COMMENT+="❌ Evaluation process failed\n\n"
-            PR_COMMENT+="The evaluation process encountered errors. See workflow logs for details."
+            echo "❌ Evaluation process failed" >> pr_comment.txt
+            echo "" >> pr_comment.txt
+            echo "The evaluation process encountered errors. See workflow logs for details." >> pr_comment.txt
           else
-            PR_COMMENT+="✅ Evaluations completed successfully\n\n"
-            PR_COMMENT+="Download the full report from the workflow artifacts"
+            # Find the latest summary file
+            LATEST_SUMMARY=$(find eval/results -name "summary-*.json" -type f | sort -r | head -1)
+            
+            if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ]; then
+              echo "Found summary file: $LATEST_SUMMARY"
+              
+              # Extract key metrics
+              RATE=$(jq -r '.successRate' "$LATEST_SUMMARY" 2>/dev/null || echo "0")
+              # Calculate percentage with bc (more reliable than jq for math)
+              SUCCESS_RATE=$(echo "$RATE * 100" | bc -l | awk '{printf "%.1f", $0}')
+              PASSED=$(jq -r '.passed' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              TOTAL=$(jq -r '.totalTests' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              
+              # Use bc for reliable floating point comparison
+              if (( $(echo "$RATE >= 0.75" | bc -l) )); then
+                echo "✅ Evaluations completed successfully: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)" >> pr_comment.txt
+              elif (( $(echo "$RATE >= 0.5" | bc -l) )); then
+                echo "⚠️ Evaluations completed with mixed results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)" >> pr_comment.txt
+              else
+                echo "❌ Evaluations completed with poor results: **${SUCCESS_RATE}%** pass rate (${PASSED}/${TOTAL} tests)" >> pr_comment.txt
+              fi
+              echo "" >> pr_comment.txt
+              
+              # Basic metrics table
+              echo "### Evaluation Summary" >> pr_comment.txt
+              echo "" >> pr_comment.txt
+              echo "| Metric | Value |" >> pr_comment.txt
+              echo "|--------|-------|" >> pr_comment.txt
+              echo "| Success Rate | ${SUCCESS_RATE}% |" >> pr_comment.txt
+              echo "| Tests Passed | $PASSED / $TOTAL |" >> pr_comment.txt
+              
+              # Add latency if available
+              AVG_LATENCY=$(jq -r '.averageLatency' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              if [ "$AVG_LATENCY" != "N/A" ] && [ "$AVG_LATENCY" != "null" ]; then
+                AVG_LATENCY_INT=$(echo "$AVG_LATENCY" | awk '{printf "%.0f", $0}')
+                echo "| Avg Latency | ${AVG_LATENCY_INT}ms |" >> pr_comment.txt
+              fi
+              
+              # Add basic model information
+              echo "" >> pr_comment.txt
+              echo "### Models Tested" >> pr_comment.txt
+              echo "" >> pr_comment.txt
+              
+              # Extract providers directly
+              echo "| Provider | Model |" >> pr_comment.txt
+              echo "|----------|-------|" >> pr_comment.txt
+              
+              # OpenAI models
+              OPENAI_MODELS=$(jq -r '.results[] | select(.provider == "openai") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u)
+              if [ -n "$OPENAI_MODELS" ]; then
+                while read -r model; do
+                  if [ -n "$model" ]; then
+                    echo "| OpenAI | $model |" >> pr_comment.txt
+                  fi
+                done <<< "$OPENAI_MODELS"
+              fi
+              
+              # Anthropic models
+              ANTHROPIC_MODELS=$(jq -r '.results[] | select(.provider == "anthropic") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u)
+              if [ -n "$ANTHROPIC_MODELS" ]; then
+                while read -r model; do
+                  if [ -n "$model" ]; then
+                    echo "| Anthropic | $model |" >> pr_comment.txt
+                  fi
+                done <<< "$ANTHROPIC_MODELS"
+              fi
+            else
+              echo "✅ Evaluations completed successfully" >> pr_comment.txt
+              echo "" >> pr_comment.txt
+              echo "No detailed metrics available" >> pr_comment.txt
+            fi
+            
+            # Always add a link to the artifacts
+            echo "" >> pr_comment.txt
+            echo "📊 [View full report in workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> pr_comment.txt
           fi
           
-          echo -e "$PR_COMMENT" > pr_comment.txt
-          
+          # Post the comment to the PR
           gh pr comment ${{ github.event.pull_request.number }} --body-file pr_comment.txt
         fi
       env:
