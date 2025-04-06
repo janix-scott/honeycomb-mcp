@@ -192,17 +192,18 @@ jobs:
           else
             PR_COMMENT+="✅ Evaluations completed successfully\n\n"
             
-            # Extract key metrics from the report using simple grep/sed
-            if [ -f "${{ steps.find-report.outputs.latest_report }}" ]; then
-              # Get success rate with grep/sed
-              SUCCESS_RATE=$(grep -A1 '<div class="label">Success Rate</div>' "${{ steps.find-report.outputs.latest_report }}" | grep value | sed -E 's/.*<div class="value">([0-9.]+)%.*/\1/g' || echo "N/A")
+            # Extract key metrics directly from summary.json instead of HTML
+            # Find the latest summary file
+            LATEST_SUMMARY=$(find eval/results -name "summary-*.json" -type f | sort -r | head -1)
+            
+            if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ]; then
+              echo "Found summary file: $LATEST_SUMMARY"
               
-              # Get passed and total tests
-              PASSED=$(grep -A1 '<div class="label">Passed</div>' "${{ steps.find-report.outputs.latest_report }}" | grep value | sed -E 's/.*<div class="value success">([0-9]+).*/\1/g' || echo "N/A")
-              TOTAL=$(grep -A1 '<div class="label">Total Tests</div>' "${{ steps.find-report.outputs.latest_report }}" | grep value | sed -E 's/.*<div class="value">([0-9]+).*/\1/g' || echo "N/A")
-              
-              # Get average latency
-              AVG_LATENCY=$(grep -A1 '<div class="label">Avg Latency</div>' "${{ steps.find-report.outputs.latest_report }}" | grep value | sed -E 's/.*<div class="value">([0-9]+)ms.*/\1/g' || echo "N/A")
+              # Parse JSON with jq to extract metrics
+              SUCCESS_RATE=$(jq -r '.successRate * 100 | round(1)' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              PASSED=$(jq -r '.passed' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              TOTAL=$(jq -r '.totalTests' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              AVG_LATENCY=$(jq -r '.averageLatency | round' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               
               # Add summary metrics table
               PR_COMMENT+="### Evaluation Summary\n\n"
@@ -211,25 +212,44 @@ jobs:
               PR_COMMENT+="| Success Rate | $SUCCESS_RATE% |\n"
               PR_COMMENT+="| Tests Passed | $PASSED / $TOTAL |\n"
               PR_COMMENT+="| Avg Latency | ${AVG_LATENCY}ms |\n\n"
+            else
+              echo "No summary.json file found in eval/results"
+              
+              # Add placeholder metrics table
+              PR_COMMENT+="### Evaluation Summary\n\n"
+              PR_COMMENT+="| Metric | Value |\n"
+              PR_COMMENT+="|--------|-------|\n"
+              PR_COMMENT+="| Success Rate | N/A |\n"
+              PR_COMMENT+="| Tests Passed | N/A |\n"
+              PR_COMMENT+="| Avg Latency | N/A |\n\n"
             fi
             
-            # Add models tested section
+            # Add models tested section - extract from summary.json results
             PR_COMMENT+="### Models Tested\n\n"
             
-            # Parse models in a more shell-compatible way
-            if [ -n "$EVAL_MODELS" ]; then
-              # Extract OpenAI models
-              OPENAI_MODELS=$(echo "$EVAL_MODELS" | jq -r '.openai | if . == null then "N/A" elif type == "array" then join(", ") else . end' 2>/dev/null || echo "N/A")
+            if [ -n "$LATEST_SUMMARY" ] && [ -f "$LATEST_SUMMARY" ]; then
+              # Get unique models grouped by provider from summary.json
+              OPENAI_MODELS=$(jq -r '.results[] | select(.provider == "openai") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u | tr '\n' ', ' | sed 's/,$//' | sed 's/,/, /g' || echo "None")
+              ANTHROPIC_MODELS=$(jq -r '.results[] | select(.provider == "anthropic") | .model' "$LATEST_SUMMARY" 2>/dev/null | sort -u | tr '\n' ', ' | sed 's/,$//' | sed 's/,/, /g' || echo "None")
               
-              # Extract Anthropic models
-              ANTHROPIC_MODELS=$(echo "$EVAL_MODELS" | jq -r '.anthropic | if . == null then "N/A" elif type == "array" then join(", ") else . end' 2>/dev/null || echo "N/A")
+              # Add to the comment if models were found
+              if [ -n "$OPENAI_MODELS" ] && [ "$OPENAI_MODELS" != "None" ]; then
+                PR_COMMENT+="- OpenAI: ${OPENAI_MODELS}\n"
+              fi
               
-              # Add to the comment
-              PR_COMMENT+="- OpenAI: ${OPENAI_MODELS}\n"
-              PR_COMMENT+="- Anthropic: ${ANTHROPIC_MODELS}\n\n"
+              if [ -n "$ANTHROPIC_MODELS" ] && [ "$ANTHROPIC_MODELS" != "None" ]; then
+                PR_COMMENT+="- Anthropic: ${ANTHROPIC_MODELS}\n"
+              fi
+              
+              # If no models were found for either provider
+              if [ "$OPENAI_MODELS" == "None" ] && [ "$ANTHROPIC_MODELS" == "None" ]; then
+                PR_COMMENT+="- Model information could not be extracted from results\n"
+              fi
             else
-              PR_COMMENT+="- Model information not available\n\n"
+              PR_COMMENT+="- Model information not available\n"
             fi
+            
+            PR_COMMENT+="\n"
             
             PR_COMMENT+="📊 [View full report in workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           fi
