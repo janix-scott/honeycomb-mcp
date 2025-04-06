@@ -222,13 +222,13 @@ jobs:
               echo "Found summary file: $LATEST_SUMMARY"
               
               # Parse JSON with jq to extract metrics
-              SUCCESS_RATE=$(jq -r '.successRate * 100 | round(1)' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              SUCCESS_RATE=$(jq -r '.successRate * 100' "$LATEST_SUMMARY" 2>/dev/null | awk '{printf "%.1f", $1}' || echo "N/A")
               PASSED=$(jq -r '.passed' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               TOTAL=$(jq -r '.totalTests' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               AVG_LATENCY=$(jq -r '.averageLatency | round' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               
               # Get additional metrics if available
-              AVG_TOOL_CALLS=$(jq -r 'if has("averageToolCalls") then .averageToolCalls | round(1) else "N/A" end' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
+              AVG_TOOL_CALLS=$(jq -r 'if has("averageToolCalls") then .averageToolCalls else "N/A" end' "$LATEST_SUMMARY" 2>/dev/null | awk '{printf "%.1f", $1}' || echo "N/A")
               AVG_TOOL_TOKENS=$(jq -r 'if has("averageToolTokens") then .averageToolTokens | round else "N/A" end' "$LATEST_SUMMARY" 2>/dev/null || echo "N/A")
               
               # Get judge details if available
@@ -294,7 +294,7 @@ jobs:
                   PROVIDER=$(echo "$model_entry" | jq -r '.provider')
                   MODEL=$(echo "$model_entry" | jq -r '.model')
                   COUNT=$(echo "$model_entry" | jq -r '.count')
-                  SUCCESS=$(echo "$model_entry" | jq -r '.success_rate | round(1)')
+                  SUCCESS=$(echo "$model_entry" | jq -r '.success_rate' | awk '{printf "%.1f", $1}')
                   
                   # Convert provider to title case
                   PROVIDER_FORMATTED=$(echo "$PROVIDER" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
@@ -339,7 +339,7 @@ jobs:
                     ID=$(echo "$test" | jq -r '.id')
                     PROVIDER=$(echo "$test" | jq -r '.provider')
                     MODEL=$(echo "$test" | jq -r '.model')
-                    SCORE=$(echo "$test" | jq -r 'if has("score") and .score != null then (.score * 100 | round) | tostring + "%" else "N/A" end')
+                    SCORE=$(echo "$test" | jq -r 'if has("score") and .score != null then .score * 100 else "N/A" end' | awk '{printf "%.0f%%", $1}')
                     
                     # Format provider name
                     PROVIDER_FORMATTED=$(echo "$PROVIDER" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')
