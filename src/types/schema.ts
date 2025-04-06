@@ -181,7 +181,7 @@ export const QueryToolSchema = z.object({
 export const ColumnAnalysisSchema = z.object({
   environment: z.string(),
   dataset: z.string(),
-  column: z.string(),
+  columns: z.array(z.string()).min(1).max(10),
   timeRange: z.number().optional(),
 });
 
