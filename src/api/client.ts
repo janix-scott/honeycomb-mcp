@@ -526,14 +526,18 @@ export class HoneycombAPI {
       calculations: [{ op: "COUNT" }],
       breakdowns: [...params.columns],
       time_range: params.timeRange || 3600,
-      orders: [
-        {
-          op: "COUNT",
-          order: "descending",
-        },
-      ],
       limit: 10,
     };
+    
+    // Only add orders if we have columns
+    if (params.columns && params.columns.length > 0) {
+      query.orders = [
+        {
+          column: params.columns[0] as string, // Force type assertion
+          order: "descending",
+        }
+      ];
+    }
 
     // Add numeric calculations for any numeric columns
     const numericColumns = columns.filter(
@@ -547,6 +551,10 @@ export class HoneycombAPI {
         { op: "MAX", column: column.key_name },
         { op: "MIN", column: column.key_name },
       ];
+      
+      if (!query.calculations) {
+        query.calculations = [];
+      }
       query.calculations.push(...numericCalculations);
     });
 
