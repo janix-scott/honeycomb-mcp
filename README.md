@@ -1,4 +1,4 @@
-# Honeycomb MCP Server
+# Honeycomb MCP
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for interacting with Honeycomb observability data. This server enables LLMs like Claude to directly analyze and query your Honeycomb datasets across multiple environments.
 
