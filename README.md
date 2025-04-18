@@ -4,6 +4,16 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for interacti
 
 ![Honeycomb MCP Logo](/img/logo.png)
 
+## Requirements
+
+- Node.js 18+
+- Honeycomb API key with full permissions:
+  - Query access for analytics
+  - Read access for SLOs and Triggers
+  - Environment-level access for dataset operations
+
+ Honeycomb MCP is effectively a complete alternative interface to Honeycomb, and thus you need broad permissions for the API.
+
 ## Honeycomb Enterprise Only
 
 Currently, this is only available for Honeycomb Enterprise customers.
@@ -335,14 +345,6 @@ Here are some real-world example queries:
 pnpm install
 pnpm run build
 ```
-
-## Requirements
-
-- Node.js 16+
-- Honeycomb API keys with appropriate permissions:
-  - Query access for analytics
-  - Read access for SLOs and Triggers
-  - Environment-level access for dataset operations
 
 ## License
 
