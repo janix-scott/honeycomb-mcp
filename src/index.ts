@@ -8,11 +8,40 @@ import { registerTools } from "./tools/index.js";
 import { registerPrompts } from "./prompts/index.js";
 import { initializeCache } from "./cache/index.js";
 
+function checkNodeVersion() {
+  const requiredMajorVersion = 18;
+  const nodeVersion: string = process.versions.node;
+  if (!nodeVersion) {
+    console.error(`Error: Unable to determine Node.js version. Node.js version ${requiredMajorVersion} or higher is required.`);
+    process.exit(1);
+  }
+
+  const majorVersion = nodeVersion.split('.')[0];
+  if (!majorVersion) {
+    console.error(`Error: Unable to determine Node.js major version. Node.js version ${requiredMajorVersion} or higher is required.`);
+    process.exit(1);
+  }
+
+  const currentMajorVersion = parseInt(majorVersion, 10);
+  if (isNaN(currentMajorVersion)) {
+    console.error(`Error: Unable to parse Node.js major version. Node.js version ${requiredMajorVersion} or higher is required.`);
+    process.exit(1);
+  }
+
+  if (currentMajorVersion < requiredMajorVersion) {
+    console.error(
+      `Error: Node.js version ${requiredMajorVersion} or higher is required. Current version: ${nodeVersion}`
+    );
+    process.exit(1);
+  }
+}
+
 /**
  * Main function to run the Honeycomb MCP server
  */
 async function main() {
   try {
+    checkNodeVersion();
     // Load config asynchronously and create API client
     console.error("Loading configuration from environment variables...");
     const config = await loadConfig();
