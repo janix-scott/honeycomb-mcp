@@ -12,20 +12,19 @@ function checkNodeVersion() {
   const requiredMajorVersion = 18;
   const nodeVersion: string = process.versions.node;
   if (!nodeVersion) {
-    console.error("Error: Unable to determine Node.js version. Node.js version ${requiredMajorVersion} or higher is required.");
+    console.error(`Error: Unable to determine Node.js version. Node.js version ${requiredMajorVersion} or higher is required.`);
     process.exit(1);
   }
 
   const majorVersion = nodeVersion.split('.')[0];
   if (!majorVersion) {
-    console.error("Error: Unable to determine Node.js major version. Node.js version ${requiredMajorVersion} or higher is required.");
+    console.error(`Error: Unable to determine Node.js major version. Node.js version ${requiredMajorVersion} or higher is required.`);
     process.exit(1);
   }
 
   const currentMajorVersion = parseInt(majorVersion, 10);
   if (isNaN(currentMajorVersion)) {
-    console.error("Error: Unable to parse Node.js major version. Node.js version ${requiredMajorVersion} or higher is required.");
-    process.exit(1);
+    console.error(`Error: Unable to parse Node.js major version. Node.js version ${requiredMajorVersion} or higher is required.`);
   }
 
   if (currentMajorVersion < requiredMajorVersion) {
