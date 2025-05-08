@@ -45,7 +45,10 @@ jobs:
       - name: Install MCP Validator
         run: |
           python -m pip install --upgrade pip
-          pip install git+https://github.com/janix-ai/mcp-validator.git
+          git clone https://github.com/Janix-ai/mcp-validator.git /tmp/mcp-validator
+          cd /tmp/mcp-validator
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Run compliance tests
         id: stdio-test
