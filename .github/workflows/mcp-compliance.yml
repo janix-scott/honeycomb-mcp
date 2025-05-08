@@ -56,7 +56,9 @@ jobs:
           pip install -r requirements.txt
 
       - name: Create reports directory
-        run: mkdir -p reports
+        run: |
+          mkdir -p reports
+          mkdir -p docs/compliance-reports
 
       - name: Run compliance tests
         id: stdio-test
@@ -72,9 +74,14 @@ jobs:
             --server-command "node build/index.mjs" \
             --protocol-version ${{ matrix.protocol-version }} || {
               echo "Tests failed with exit code $?"
-              # Don't fail the workflow on test failures - we want to see the results
-              # The badge update will show the status
           }
+          
+          # Copy the latest report to docs directory
+          LATEST_REPORT=$(ls -t reports/*.md | head -1)
+          if [ -f "$LATEST_REPORT" ]; then
+            cp "$LATEST_REPORT" docs/compliance-reports/latest.md
+            echo "REPORT_PATH=docs/compliance-reports/latest.md" >> $GITHUB_ENV
+          fi
 
       - name: Upload test reports
         if: always()
@@ -111,6 +118,11 @@ jobs:
                     summary += `- ${test.name}: ${test.error_message || 'No error message'}\n`;
                   });
                 }
+
+                // Add link to full report if available
+                if (process.env.REPORT_PATH) {
+                  summary += `\n[View Full Report](${process.env.REPORT_PATH})\n`;
+                }
               } else {
                 summary += "No test report found.\n";
               }
@@ -126,7 +138,7 @@ jobs:
               core.warning(`Failed to create PR comment: ${error.message}`);
             }
 
-      - name: Update badges
+      - name: Update badges and reports
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           # Read success rate from JSON report
@@ -134,6 +146,7 @@ jobs:
           if [ -f "$REPORT_FILE" ]; then
             SUCCESS_RATE=$(jq -r '.success_rate // 0' "$REPORT_FILE")
             
+            # Update badge
             mkdir -p .github/mcp-compliance/badges
             cat > .github/mcp-compliance/badges/compliance.json << EOF
             {
@@ -144,9 +157,10 @@ jobs:
             }
             EOF
             
+            # Commit changes
             git config --global user.name "GitHub Action"
             git config --global user.email "action@github.com"
-            git add .github/mcp-compliance/badges
-            git commit -m "chore: Update MCP compliance badge [skip ci]" || echo "No changes to commit"
-            git push origin HEAD:main || echo "Failed to push badge update"
+            git add .github/mcp-compliance/badges docs/compliance-reports
+            git commit -m "chore: Update MCP compliance badge and reports [skip ci]" || echo "No changes to commit"
+            git push origin HEAD:main || echo "Failed to push updates"
           fi 
