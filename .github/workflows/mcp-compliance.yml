@@ -48,7 +48,6 @@ jobs:
           git clone https://github.com/Janix-ai/mcp-validator.git /tmp/mcp-validator
           cd /tmp/mcp-validator
           pip install -r requirements.txt
-          pip install -e .
 
       - name: Run compliance tests
         id: stdio-test
@@ -57,6 +56,7 @@ jobs:
           HONEYCOMB_API_ENDPOINT: http://localhost:8080
           HONEYCOMB_CACHE_ENABLED: 'false'
           NODE_ENV: test
+          PYTHONPATH: /tmp/mcp-validator
         run: |
           mkdir -p reports
           
