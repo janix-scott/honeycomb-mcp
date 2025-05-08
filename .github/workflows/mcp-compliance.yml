@@ -76,11 +76,16 @@ jobs:
               echo "Tests failed with exit code $?"
           }
           
-          # Copy the latest report to docs directory
-          LATEST_REPORT=$(ls -t reports/*.md | head -1)
+          # Find and copy the latest report
+          LATEST_REPORT=$(ls -t /tmp/mcp-validator/reports/*.md | head -1)
           if [ -f "$LATEST_REPORT" ]; then
+            echo "Found report at $LATEST_REPORT"
             cp "$LATEST_REPORT" docs/compliance-reports/latest.md
             echo "REPORT_PATH=docs/compliance-reports/latest.md" >> $GITHUB_ENV
+            echo "Report copied to docs/compliance-reports/latest.md"
+          else
+            echo "No markdown report found in /tmp/mcp-validator/reports/"
+            ls -la /tmp/mcp-validator/reports/
           fi
 
       - name: Upload test reports
@@ -88,7 +93,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mcp-compliance-reports-${{ matrix.protocol-version }}
-          path: reports/
+          path: |
+            reports/
+            docs/compliance-reports/
           retention-days: 14
 
       - name: Post summary to PR
@@ -120,8 +127,9 @@ jobs:
                 }
 
                 // Add link to full report if available
-                if (process.env.REPORT_PATH) {
-                  summary += `\n[View Full Report](${process.env.REPORT_PATH})\n`;
+                const latestReport = 'docs/compliance-reports/latest.md';
+                if (fs.existsSync(latestReport)) {
+                  summary += `\n[View Full Report](${latestReport})\n`;
                 }
               } else {
                 summary += "No test report found.\n";
