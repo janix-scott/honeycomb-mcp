@@ -61,7 +61,7 @@ jobs:
       - name: Run compliance tests
         id: stdio-test
         env:
-          HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
+          HONEYCOMB_API_KEY: test_key
           HONEYCOMB_API_ENDPOINT: http://localhost:8080
           HONEYCOMB_CACHE_ENABLED: 'false'
           NODE_ENV: test
