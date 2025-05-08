@@ -1,3 +1,8 @@
+/**
+ * Honeycomb MCP Server Implementation
+ * MCP Compliance Status: Testing in progress against protocol version 2025-03-26
+ */
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config.js";
