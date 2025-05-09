@@ -2,23 +2,33 @@ name: MCP Compliance Tests
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, trigger-workflow ]
   push:
-    branches: [ main ]
+    branches: [ main, trigger-workflow ]
   workflow_dispatch:
 
 jobs:
   compliance-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        protocol-version: ["2025-03-26"]
+    
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.4.1
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -26,101 +36,139 @@ jobs:
           node-version: '18'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        run: npm install -g pnpm
-
       - name: Install dependencies
         run: pnpm install
 
       - name: Build server
         run: pnpm run build
 
-      - name: Clone MCP Validator
+      - name: Verify build output
         run: |
-          git clone https://github.com/modelcontextprotocol/mcp-validator.git
-          cd mcp-validator
+          ls -la build/
+          test -f build/index.mjs || (echo "Server file not found" && exit 1)
+          node -c build/index.mjs || (echo "JavaScript syntax error in build output" && exit 1)
+
+      - name: Install MCP Validator
+        run: |
+          python -m pip install --upgrade pip
+          git clone https://github.com/Janix-ai/mcp-validator.git /tmp/mcp-validator
+          cd /tmp/mcp-validator
           pip install -r requirements.txt
 
+      - name: Create reports directory
+        run: |
+          mkdir -p reports
+          mkdir -p docs/compliance-reports
+
       - name: Run compliance tests
+        id: stdio-test
         env:
           HONEYCOMB_API_KEY: test_key
           HONEYCOMB_API_ENDPOINT: http://localhost:8080
           HONEYCOMB_CACHE_ENABLED: 'false'
           NODE_ENV: test
+          PYTHONPATH: /tmp/mcp-validator
         run: |
-          cd mcp-validator
+          # Run compliance tests with proper error handling
           python -m mcp_testing.scripts.compliance_report \
-            --server-command "node ${{ github.workspace }}/build/index.mjs" \
-            --protocol-version 2025-03-26
-
-      - name: Process compliance report
-        id: process-report
-        run: |
-          mkdir -p .github/mcp-compliance/reports
-          LATEST_REPORT=$(ls -t mcp-validator/reports/cr_*.md | head -n 1)
+            --server-command "node build/index.mjs" \
+            --protocol-version ${{ matrix.protocol-version }} || {
+              echo "Tests failed with exit code $?"
+          }
           
+          # Find and copy the latest report
+          LATEST_REPORT=$(ls -t /tmp/mcp-validator/reports/*.md | head -1)
           if [ -f "$LATEST_REPORT" ]; then
-            COMPLIANCE=$(grep "Compliance Status:" "$LATEST_REPORT" | grep -o "[0-9.]*")
-            REPORT_NAME="compliance-${COMPLIANCE}pct-$(date +%Y%m%d-%H%M%S).md"
-            cp "$LATEST_REPORT" ".github/mcp-compliance/reports/$REPORT_NAME"
-            ln -sf "$REPORT_NAME" .github/mcp-compliance/reports/latest.md
-            echo "report_path=.github/mcp-compliance/reports/$REPORT_NAME" >> $GITHUB_OUTPUT
-            echo "compliance=$COMPLIANCE" >> $GITHUB_OUTPUT
+            echo "Found report at $LATEST_REPORT"
+            cp "$LATEST_REPORT" docs/compliance-reports/latest.md
+            echo "REPORT_PATH=docs/compliance-reports/latest.md" >> $GITHUB_ENV
+            echo "Report copied to docs/compliance-reports/latest.md"
+          else
+            echo "No markdown report found in /tmp/mcp-validator/reports/"
+            ls -la /tmp/mcp-validator/reports/
+          fi
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-compliance-reports-${{ matrix.protocol-version }}
+          path: |
+            reports/
+            docs/compliance-reports/
+          retention-days: 14
+
+      - name: Post summary to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            try {
+              const reportFiles = fs.readdirSync('reports');
+              const jsonReportFile = reportFiles.find(file => file.endsWith('.json'));
+              
+              let summary = "## MCP Compliance Test Results\n\n";
+              
+              if (jsonReportFile) {
+                const reportData = JSON.parse(fs.readFileSync(`reports/${jsonReportFile}`, 'utf8'));
+                summary += `- Protocol Version: ${reportData.protocol_version || 'Unknown'}\n`;
+                summary += `- Success Rate: ${reportData.success_rate || 'Unknown'}\n`;
+                summary += `- Tests Run: ${reportData.total_tests || 0}\n`;
+                
+                // Add failed tests if any
+                const failedTests = (reportData.test_cases || []).filter(tc => tc.status === 'failed');
+                if (failedTests.length > 0) {
+                  summary += `\n### Failed Tests (${failedTests.length}):\n\n`;
+                  failedTests.forEach(test => {
+                    summary += `- ${test.name}: ${test.error_message || 'No error message'}\n`;
+                  });
+                }
+
+                // Add link to full report if available
+                const latestReport = 'docs/compliance-reports/latest.md';
+                if (fs.existsSync(latestReport)) {
+                  summary += `\n[View Full Report](${latestReport})\n`;
+                }
+              } else {
+                summary += "No test report found.\n";
+              }
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: summary
+              });
+            } catch (error) {
+              console.error('Error creating PR comment:', error);
+              core.warning(`Failed to create PR comment: ${error.message}`);
+            }
+
+      - name: Update badges and reports
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # Read success rate from JSON report
+          REPORT_FILE=$(ls -t reports/*.json | head -n 1)
+          if [ -f "$REPORT_FILE" ]; then
+            SUCCESS_RATE=$(jq -r '.success_rate // 0' "$REPORT_FILE")
             
+            # Update badge
             mkdir -p .github/mcp-compliance/badges
             cat > .github/mcp-compliance/badges/compliance.json << EOF
             {
               "schemaVersion": 1,
               "label": "mcp-compliance",
-              "message": "${COMPLIANCE}%",
-              "color": $([ $(echo "$COMPLIANCE >= 90" | bc -l) = 1 ] && echo '"success"' || echo '"critical"')
+              "message": "${SUCCESS_RATE}%",
+              "color": $([ $(echo "$SUCCESS_RATE >= 90" | bc -l) = 1 ] && echo '"success"' || echo '"critical"')
             }
             EOF
-          else
-            echo "No report file found!"
-            exit 1
-          fi
-
-      - name: Upload compliance artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcp-compliance
-          path: |
-            .github/mcp-compliance/reports/
-            .github/mcp-compliance/badges/
-          retention-days: 90
-
-      - name: Comment PR with Results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('.github/mcp-compliance/reports/latest.md', 'utf8');
-            const summary = report.split('\n').slice(0, 20).join('\n');
-            const compliance = '${{ steps.process-report.outputs.compliance }}';
             
-            const comment = `## MCP Compliance Test Results
-            
-            ![MCP Compliance](https://img.shields.io/badge/mcp--compliance-${compliance}%25-${parseFloat(compliance) >= 90 ? 'success' : 'critical'})
-            
-            ${summary}
-            
-            [Full Report](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
-            `;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      - name: Update badges
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          git add .github/mcp-compliance
-          git commit -m "chore: Update MCP compliance report and badges [skip ci]" || echo "No changes to commit"
-          git push 
+            # Commit changes
+            git config --global user.name "GitHub Action"
+            git config --global user.email "action@github.com"
+            git add .github/mcp-compliance/badges docs/compliance-reports
+            git commit -m "chore: Update MCP compliance badge and reports [skip ci]" || echo "No changes to commit"
+            git push origin HEAD:main || echo "Failed to push updates"
+          fi 

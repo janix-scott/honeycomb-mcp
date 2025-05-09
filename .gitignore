@@ -6,3 +6,4 @@ eval/results/
 eval/reports/
 .DS_Store
 coverage/
+manual-testing.md

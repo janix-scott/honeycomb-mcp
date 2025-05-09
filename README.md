@@ -130,6 +130,7 @@ It will likely work with other clients.
 - View and analyze Triggers
 - Access dataset metadata and schema information
 - Optimized performance with TTL-based caching for all non-query API calls
+- Fully compliant with Model Context Protocol specification (automated testing on every PR)
 
 #### Resources
 
