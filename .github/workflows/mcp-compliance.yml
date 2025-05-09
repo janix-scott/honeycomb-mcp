@@ -2,9 +2,9 @@ name: MCP Compliance Tests
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, trigger-workflow ]
   push:
-    branches: [ main ]
+    branches: [ main, trigger-workflow ]
   workflow_dispatch:
 
 jobs:
